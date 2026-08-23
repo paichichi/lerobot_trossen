@@ -33,6 +33,27 @@ uv pip list | grep trossen
 
 ## Usage
 
+### ACT-lite (official LeRobot policy)
+
+This fork includes a reproducible lightweight ACT recipe for the 20 Hz,
+dual-camera, 7-D Trossen carrot dataset. The main experiment keeps the trained
+`ours_rn50` TCC visual backbone: a small `tcc_act` plugin replaces only ACT's
+default image encoder. The CVAE, Transformer, action-chunk objective,
+normalization, and runtime queue remain the implementation shipped by the locked
+`lerobot==0.6.0` dependency.
+
+The existing dataset uses the LeRobot v2.1 format. LeRobot 0.6.0 uses v3.0, so
+make a backup and run the official in-place converter once. See
+[`ACT_LITE_COMMANDS.txt`](ACT_LITE_COMMANDS.txt) for validation, conversion,
+training, and real-robot evaluation commands.
+
+The lightweight preset keeps the core ACT design (multi-view features,
+proprioception, CVAE, and action chunks) while reducing the Transformer width
+and layer count. Both `cam_main` and `cam_wrist` are policy inputs; LeRobot ACT
+discovers them from dataset metadata and applies the same trained `ours_rn50`
+backbone to each view. The initial controlled experiment freezes that backbone,
+so the upstream representation remains the primary experimental variable.
+
 ### Teleoperation Script
 
 Teleoperate a WidowX AI robot with another WidowX AI robot.

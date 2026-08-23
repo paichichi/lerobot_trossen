@@ -9,12 +9,20 @@ requires-python = ">=3.12"
 dependencies = [
   "lerobot_robot_trossen>=0.1.0",
   "lerobot_teleoperator_trossen>=0.1.0",
+  "lerobot_policy_tcc_act>=0.1.0",
   "trossen-slate>=0.0.3",
 ]
+
+[project.optional-dependencies]
+# Keep ACT on the exact LeRobot release recorded in uv.lock.  The policy itself
+# remains upstream LeRobot code; this repository only owns the Trossen adapter
+# and reproducible experiment entry points.
+act = ["lerobot[training]==0.6.0"]
 
 [tool.uv.sources]
 lerobot_robot_trossen = { workspace = true }
 lerobot_teleoperator_trossen = { workspace = true }
+lerobot_policy_tcc_act = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

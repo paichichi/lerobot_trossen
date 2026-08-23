@@ -1,0 +1,85 @@
+# TCC-ACT-lite: ours_rn50 upstream backbone + official LeRobot ACT/Trossen
+# Run from the lerobot_trossen repository root.
+
+# 1. Install the exact locked runtime plus the official LeRobot training extra.
+uv sync --extra act
+
+# 2. Point this at the carrot dataset folder containing meta/, data/, videos/.
+export ACT_DATASET_ROOT="$PWD/datasets/pick_and_place_4_object_diverse/pick_and_place_carrot_100"
+
+# 3. Validate the original LeRobot v2.1 dataset.
+uv run python scripts/check_act_dataset.py "$ACT_DATASET_ROOT"
+
+# 4. One-time IN-PLACE conversion to LeRobot v3.0. Make a backup first.
+#    This stays local and does not modify the Hugging Face dataset.
+uv run python -m lerobot.scripts.convert_dataset_v21_to_v30 \
+  --repo-id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
+  --root="$ACT_DATASET_ROOT" \
+  --push-to-hub=false
+
+# 5. Confirm the converted dataset contract.
+uv run python scripts/check_act_dataset.py \
+  "$ACT_DATASET_ROOT" \
+  --require-v3
+
+# 6. Download the upstream ours_rn50 backbone used by the experiment.
+hf download Chipaipai/tcc-core-real-robot-policies \
+  backbones/ours_rn50/checkpoint_040000.pt \
+  --local-dir=assets/tcc-policy-assets
+
+export TCC_SOURCE_ROOT="/home/robotarm/TCC-core"
+export TCC_BACKBONE_CHECKPOINT="$PWD/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt"
+
+# 7. Train lightweight ACT. Two image keys are discovered from dataset metadata.
+#    At 20 Hz: chunk_size=40 predicts 2 s, n_action_steps=10 executes 0.5 s
+#    before replanning. The upstream backbone is frozen in the first controlled
+#    experiment, so performance still measures the learned representation.
+uv run lerobot-train \
+  --dataset.repo_id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
+  --dataset.root="$ACT_DATASET_ROOT" \
+  --dataset.return_uint8=true \
+  --policy.type=tcc_act \
+  --policy.repo_id=Chipaipai/tcc-act-lite-ours-rn50-carrot-100 \
+  --policy.device=cuda \
+  --policy.tcc_backbone_checkpoint="$TCC_BACKBONE_CHECKPOINT" \
+  --policy.tcc_source_root="$TCC_SOURCE_ROOT" \
+  --policy.freeze_vision_backbone=true \
+  --policy.chunk_size=40 \
+  --policy.n_action_steps=10 \
+  --policy.vision_backbone=resnet50 \
+  --policy.dim_model=256 \
+  --policy.n_heads=4 \
+  --policy.dim_feedforward=1024 \
+  --policy.n_encoder_layers=2 \
+  --policy.n_decoder_layers=1 \
+  --policy.n_vae_encoder_layers=2 \
+  --batch_size=16 \
+  --steps=50000 \
+  --save_freq=10000 \
+  --log_freq=100 \
+  --output_dir=outputs/train/tcc_act_lite_ours_rn50_carrot_100 \
+  --job_name=tcc_act_lite_ours_rn50_carrot_100 \
+  --wandb.enable=false
+
+# 8. Real-robot evaluation. Replace POLICY_PATH with a local checkpoint or HF repo.
+#    LeRobot connects the arm and moves to Trossen staged_positions (the same
+#    pose as dataset_collection_home). Cameras stream at the collection setting
+#    of 30 FPS; the robot/control and dataset sampling rate remain 20 Hz.
+export POLICY_PATH="outputs/train/tcc_act_lite_ours_rn50_carrot_100/checkpoints/last/pretrained_model"
+
+uv run lerobot-record \
+  --robot.type=widowxai_follower_robot \
+  --robot.ip_address=192.168.1.4 \
+  --robot.id=follower \
+  --robot.loop_rate=20 \
+  --robot.min_time_to_move_multiplier=1.0 \
+  --robot.max_relative_target=0.10 \
+  --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}' \
+  --dataset.repo_id=Chipaipai/act-lite-carrot-eval \
+  --dataset.num_episodes=5 \
+  --dataset.episode_time_s=30 \
+  --dataset.reset_time_s=10 \
+  --dataset.single_task="Pick up the carrot and place it in the pan" \
+  --dataset.push_to_hub=false \
+  --display_data=true \
+  --policy.path="$POLICY_PATH"
