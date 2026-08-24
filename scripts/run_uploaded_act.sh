@@ -113,7 +113,6 @@ record_command=(
   --dataset.single_task="Pick up the carrot and place it in the pan"
   --dataset.push_to_hub=false
   --display_data=true
-  --policy.discover_packages_path=lerobot_policy_backbone_act
   --policy.path="$policy_path"
 )
 printf '%q ' "${record_command[@]}" > "$run_dir/resolved_command.txt"
