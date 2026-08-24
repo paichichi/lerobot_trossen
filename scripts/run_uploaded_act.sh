@@ -82,7 +82,9 @@ if [[ "$model" == ours_rn50 ]]; then
   sha256sum "$BACKBONE_CHECKPOINT" >> "$run_dir/weights.sha256"
 fi
 
-uv run --no-sync python -m json.tool "$policy_path/first_frame_report.json"
+uv run --no-sync python -c \
+  'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({"decision": d["decision"], "summary": d["summary"], "gates": d["gates"]}, indent=2))' \
+  "$policy_path/first_frame_report.json"
 if [[ "$mode" != --execute ]]; then
   echo "Downloaded only. The robot was not connected or moved."
   exit 0
@@ -90,7 +92,7 @@ fi
 
 echo "Starting physical evaluation: $model. Keep the E-stop ready."
 record_command=(
-  uv run --no-sync lerobot-record
+  uv run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
   --robot.type=widowxai_follower_robot
   --robot.ip_address=192.168.1.4
@@ -99,6 +101,10 @@ record_command=(
   --robot.min_time_to_move_multiplier=2.0
   --robot.max_relative_target='{"joint_0": 0.07, "joint_1": 0.07, "joint_2": 0.07, "joint_3": 0.07, "joint_4": 0.07, "joint_5": 0.07, "left_carriage_joint": 0.003}'
   --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
+  --strategy.type=episodic
+  --fps=20
+  --task="Pick up the carrot and place it in the pan"
+  --return_to_initial_position=true
   --dataset.repo_id="Chipaipai/act-${model}-carrot-eval"
   --dataset.root="$run_dir/dataset"
   --dataset.num_episodes=1
