@@ -64,6 +64,17 @@ def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:
     assert not backbone.batch_norm.training
 
 
+def test_trainable_backbone_keeps_batch_norm_statistics_frozen() -> None:
+    backbone = _BackboneWithBatchNorm()
+    encoder = _BackboneSpatialEncoder(backbone, _encoder_config(frozen=False))
+
+    encoder.train()
+
+    assert encoder.training
+    assert backbone.training
+    assert not backbone.batch_norm.training
+
+
 def test_lite_release_rejects_vit_until_spatial_adapter_exists() -> None:
     with pytest.raises(ValueError, match="ViT requires"):
         BackboneACTConfig(backbone_family="ours_vit")

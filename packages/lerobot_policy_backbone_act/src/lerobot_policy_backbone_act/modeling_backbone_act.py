@@ -111,6 +111,12 @@ class _BackboneSpatialEncoder(nn.Module):
         if self.freeze_backbone:
             # Freeze buffers and stochastic layers as well as parameters.
             self.backbone.eval()
+        elif mode:
+            # Match official ACT's FrozenBatchNorm2d contract while allowing
+            # RN50 convolution weights to adapt to visuomotor supervision.
+            for module in self.backbone.modules():
+                if isinstance(module, nn.modules.batchnorm._BatchNorm):
+                    module.eval()
         return self
 
     def preprocess(self, images: torch.Tensor) -> torch.Tensor:
