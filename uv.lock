@@ -641,7 +641,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "lerobot", specifier = "==0.6.0" },
-    { name = "lerobot-policy-backbone-act", specifier = ">=0.1.0" },
+    { name = "lerobot-policy-backbone-act", editable = "packages/lerobot_policy_backbone_act" },
 ]
 
 [[package]]
