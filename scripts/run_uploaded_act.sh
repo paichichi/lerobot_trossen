@@ -112,7 +112,7 @@ record_command=(
   --dataset.reset_time_s=10
   --dataset.single_task="Pick up the carrot and place it in the pan"
   --dataset.push_to_hub=false
-  --display_data=true
+  --display_data=false
   --policy.path="$policy_path"
 )
 printf '%q ' "${record_command[@]}" > "$run_dir/resolved_command.txt"
