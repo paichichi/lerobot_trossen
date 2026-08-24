@@ -65,6 +65,32 @@ else
   exit 1
 fi
 echo "Using uv: $uv_bin"
+
+# LeRobot's Linux core-scripts dependency includes evdev, which is built from
+# source for CPython 3.12. Keep its compiler and Python headers in a small,
+# user-owned toolchain when the robot OS does not provide build-essential.
+if [[ "$(uname -s)" == Linux ]] && ! command -v cc >/dev/null 2>&1; then
+  toolchain_root="${V11_BUILD_TOOLCHAIN_ROOT:-${HOME}/.local/share/v11-build-toolchain}"
+  toolchain_cc="$toolchain_root/bin/x86_64-conda-linux-gnu-cc"
+  if [[ ! -x "$toolchain_cc" || ! -f "$toolchain_root/include/python3.12/Python.h" ]]; then
+    if command -v conda >/dev/null 2>&1; then
+      conda_bin="$(command -v conda)"
+    elif [[ -x "${HOME}/miniconda3/bin/conda" ]]; then
+      conda_bin="${HOME}/miniconda3/bin/conda"
+    else
+      echo "A C compiler and Python 3.12 headers are required to build evdev." >&2
+      echo "Install build-essential/python3.12-dev or set V11_BUILD_TOOLCHAIN_ROOT." >&2
+      exit 1
+    fi
+    echo "Preparing the user-owned V11 build toolchain: $toolchain_root"
+    "$conda_bin" create -y -p "$toolchain_root" --override-channels \
+      -c conda-forge gcc_linux-64 python=3.12
+  fi
+  export CC="$toolchain_cc"
+  export CXX="$toolchain_root/bin/x86_64-conda-linux-gnu-c++"
+  export CFLAGS="${CFLAGS:+$CFLAGS }-I$toolchain_root/include/python3.12"
+  echo "Using user-owned C compiler: $CC"
+fi
 "$uv_bin" sync --locked --extra act
 
 echo "[2/5] Downloading the pinned V11 policy and backbone"
