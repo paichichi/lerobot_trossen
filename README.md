@@ -37,10 +37,12 @@ uv pip list | grep trossen
 
 This fork includes a reproducible lightweight ACT recipe for the 20 Hz,
 dual-camera, 7-D Trossen carrot dataset. The main experiment keeps the trained
-`ours_rn50` TCC visual backbone: a small `tcc_act` plugin replaces only ACT's
-default image encoder. The CVAE, Transformer, action-chunk objective,
-normalization, and runtime queue remain the implementation shipped by the locked
-`lerobot==0.6.0` dependency.
+upstream `ours_rn50` visual backbone: a small `backbone_act` plugin replaces only
+ACT's default image encoder. The CVAE, Transformer, action-chunk objective,
+state/action normalization, and runtime queue remain the implementation shipped
+by the locked `lerobot==0.6.0` dependency. Visual preprocessing is an explicit
+upstream-backbone contract: RGB is resized to 224x224 and ImageNet-normalized in
+the policy for identical training and robot inference behavior.
 
 The existing dataset uses the LeRobot v2.1 format. LeRobot 0.6.0 uses v3.0, so
 make a backup and run the official in-place converter once. See
@@ -52,7 +54,11 @@ proprioception, CVAE, and action chunks) while reducing the Transformer width
 and layer count. Both `cam_main` and `cam_wrist` are policy inputs; LeRobot ACT
 discovers them from dataset metadata and applies the same trained `ours_rn50`
 backbone to each view. The initial controlled experiment freezes that backbone,
-so the upstream representation remains the primary experimental variable.
+including its BatchNorm buffers and stochastic layers, so the upstream
+representation remains the primary experimental variable. Following the
+original ACT training code, complete episodes are shuffled with a fixed seed,
+80% per task are used for training, 20% for validation, and the saved checkpoint
+with the lowest validation loss is selected for robot evaluation.
 
 ### Teleoperation Script
 

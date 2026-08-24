@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lerobot_policy_backbone_act"
+version = "0.1.0"
+description = "Official LeRobot ACT with a trained upstream visual backbone"
+requires-python = ">=3.12"
+dependencies = ["lerobot==0.6.0"]
+
+[project.optional-dependencies]
+train = ["lerobot[training]==0.6.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lerobot_policy_backbone_act"]

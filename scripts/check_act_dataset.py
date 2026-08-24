@@ -7,7 +7,6 @@ import argparse
 import json
 from pathlib import Path
 
-
 EXPECTED_FPS = 20
 EXPECTED_ACTION_DIM = 7
 SUPPORTED_VERSIONS = {"v2.1", "v3.0"}

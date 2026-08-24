@@ -1,24 +1,38 @@
-# TCC-ACT-lite: ours_rn50 upstream backbone + official LeRobot ACT/Trossen
+# Backbone-ACT-lite: ours_rn50 upstream backbone + official LeRobot ACT/Trossen
 # Run from the lerobot_trossen repository root.
+set -o pipefail
 
-# 1. Install the exact locked runtime plus the official LeRobot training extra.
-uv sync --extra act
+# 1. Install only the policy and exact locked LeRobot training runtime. This
+#    avoids pulling hardware/teleoperator build dependencies onto the GPU host.
+uv sync --package lerobot-policy-backbone-act --extra train --group dev
+
+# TorchCodec removes PyAV's random-seek bottleneck. This helper only extracts
+# the missing Ubuntu FFmpeg 6 runtime libraries under .local/; it does not use
+# sudo or modify the system installation.
+bash scripts/bootstrap_torchcodec_ffmpeg6.sh
+export ACT_FFMPEG_LIB_DIR="$PWD/.local/ffmpeg6/usr/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="$ACT_FFMPEG_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# LeRobot 0.6 delegates mixed precision to Accelerate. RTX 5090 supports BF16
+# natively; model parameters and saved checkpoints remain compatible with the
+# standard LeRobot loading path.
+export ACCELERATE_MIXED_PRECISION=bf16
 
 # 2. Point this at the carrot dataset folder containing meta/, data/, videos/.
 export ACT_DATASET_ROOT="$PWD/datasets/pick_and_place_4_object_diverse/pick_and_place_carrot_100"
 
 # 3. Validate the original LeRobot v2.1 dataset.
-uv run python scripts/check_act_dataset.py "$ACT_DATASET_ROOT"
+uv run --no-sync python scripts/check_act_dataset.py "$ACT_DATASET_ROOT"
 
 # 4. One-time IN-PLACE conversion to LeRobot v3.0. Make a backup first.
 #    This stays local and does not modify the Hugging Face dataset.
-uv run python -m lerobot.scripts.convert_dataset_v21_to_v30 \
+uv run --no-sync python -m lerobot.scripts.convert_dataset_v21_to_v30 \
   --repo-id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
   --root="$ACT_DATASET_ROOT" \
   --push-to-hub=false
 
 # 5. Confirm the converted dataset contract.
-uv run python scripts/check_act_dataset.py \
+uv run --no-sync python scripts/check_act_dataset.py \
   "$ACT_DATASET_ROOT" \
   --require-v3
 
@@ -27,22 +41,38 @@ hf download Chipaipai/tcc-core-real-robot-policies \
   backbones/ours_rn50/checkpoint_040000.pt \
   --local-dir=assets/tcc-policy-assets
 
-export TCC_SOURCE_ROOT="/home/robotarm/TCC-core"
-export TCC_BACKBONE_CHECKPOINT="$PWD/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt"
+export BACKBONE_SOURCE_ROOT="${BACKBONE_SOURCE_ROOT:-/home/paichichi/projects/TCC-core}"
+export BACKBONE_CHECKPOINT="$PWD/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt"
+export ACT_OUTPUT_DIR="$PWD/outputs/train/backbone_act_lite_ours_rn50_carrot_100"
+export ACT_TRAIN_LOG="$ACT_OUTPUT_DIR.train.log"
+
+# Match original ACT: randomly shuffle complete episodes with a fixed seed, then
+# hold out 20% per task for validation. There is no offline test-demonstration set.
+export ACT_EPISODE_ORDER="$(uv run --no-sync python scripts/make_act_episode_order.py \
+  --repo-id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
+  --root="$ACT_DATASET_ROOT" \
+  --seed=1000)"
+mkdir -p "$(dirname "$ACT_OUTPUT_DIR")"
 
 # 7. Train lightweight ACT. Two image keys are discovered from dataset metadata.
 #    At 20 Hz: chunk_size=40 predicts 2 s, n_action_steps=10 executes 0.5 s
 #    before replanning. The upstream backbone is frozen in the first controlled
 #    experiment, so performance still measures the learned representation.
-uv run lerobot-train \
+uv run --no-sync lerobot-train \
   --dataset.repo_id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
   --dataset.root="$ACT_DATASET_ROOT" \
+  --dataset.episodes="$ACT_EPISODE_ORDER" \
+  --dataset.eval_split=0.2 \
   --dataset.return_uint8=true \
-  --policy.type=tcc_act \
-  --policy.repo_id=Chipaipai/tcc-act-lite-ours-rn50-carrot-100 \
+  --dataset.video_backend=torchcodec \
+  --policy.discover_packages_path=lerobot_policy_backbone_act \
+  --policy.type=backbone_act \
+  --policy.repo_id=Chipaipai/backbone-act-lite-ours-rn50-carrot-100 \
+  --policy.push_to_hub=false \
   --policy.device=cuda \
-  --policy.tcc_backbone_checkpoint="$TCC_BACKBONE_CHECKPOINT" \
-  --policy.tcc_source_root="$TCC_SOURCE_ROOT" \
+  --policy.backbone_checkpoint="$BACKBONE_CHECKPOINT" \
+  --policy.backbone_source_root="$BACKBONE_SOURCE_ROOT" \
+  --policy.backbone_family=ours_rn50 \
   --policy.freeze_vision_backbone=true \
   --policy.chunk_size=40 \
   --policy.n_action_steps=10 \
@@ -54,26 +84,42 @@ uv run lerobot-train \
   --policy.n_decoder_layers=1 \
   --policy.n_vae_encoder_layers=2 \
   --batch_size=16 \
+  --num_workers=8 \
+  --prefetch_factor=4 \
   --steps=50000 \
-  --save_freq=10000 \
+  --eval_steps=2000 \
+  --save_freq=2000 \
   --log_freq=100 \
-  --output_dir=outputs/train/tcc_act_lite_ours_rn50_carrot_100 \
-  --job_name=tcc_act_lite_ours_rn50_carrot_100 \
-  --wandb.enable=false
+  --output_dir="$ACT_OUTPUT_DIR" \
+  --job_name=backbone_act_lite_ours_rn50_carrot_100 \
+  --wandb.enable=false \
+  2>&1 | tee "$ACT_TRAIN_LOG"
+
+# Original ACT deploys the checkpoint with the lowest validation loss. Because
+# eval_steps and save_freq match, every evaluated candidate exists on disk.
+uv run --no-sync python scripts/select_best_act_checkpoint.py \
+  "$ACT_OUTPUT_DIR" \
+  --log-path="$ACT_TRAIN_LOG"
 
 # 8. Real-robot evaluation. Replace POLICY_PATH with a local checkpoint or HF repo.
 #    LeRobot connects the arm and moves to Trossen staged_positions (the same
 #    pose as dataset_collection_home). Cameras stream at the collection setting
 #    of 30 FPS; the robot/control and dataset sampling rate remain 20 Hz.
-export POLICY_PATH="outputs/train/tcc_act_lite_ours_rn50_carrot_100/checkpoints/last/pretrained_model"
+export POLICY_PATH="$(< "$ACT_OUTPUT_DIR/best_checkpoint.txt")"
 
-uv run lerobot-record \
+# On the robot-control computer, install the complete hardware workspace once.
+# Ubuntu requires a C compiler and Python headers for the evdev dependency, e.g.
+# `sudo apt install build-essential python3.12-dev`, before this sync.
+uv sync --extra act
+
+uv run --no-sync lerobot-record \
+  --robot.discover_packages_path=lerobot_robot_trossen \
   --robot.type=widowxai_follower_robot \
   --robot.ip_address=192.168.1.4 \
   --robot.id=follower \
   --robot.loop_rate=20 \
-  --robot.min_time_to_move_multiplier=1.0 \
-  --robot.max_relative_target=0.10 \
+  --robot.min_time_to_move_multiplier=2.0 \
+  --robot.max_relative_target='{"joint_0": 0.07, "joint_1": 0.07, "joint_2": 0.07, "joint_3": 0.07, "joint_4": 0.07, "joint_5": 0.07, "left_carriage_joint": 0.003}' \
   --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}' \
   --dataset.repo_id=Chipaipai/act-lite-carrot-eval \
   --dataset.num_episodes=5 \
@@ -82,4 +128,5 @@ uv run lerobot-record \
   --dataset.single_task="Pick up the carrot and place it in the pan" \
   --dataset.push_to_hub=false \
   --display_data=true \
+  --policy.discover_packages_path=lerobot_policy_backbone_act \
   --policy.path="$POLICY_PATH"
