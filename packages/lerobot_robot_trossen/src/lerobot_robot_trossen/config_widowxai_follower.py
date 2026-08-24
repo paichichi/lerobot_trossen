@@ -46,6 +46,15 @@ class WidowXAIFollowerConfig(RobotConfig):
     controller_connect_attempts: int = 3
     controller_connect_retry_delay_s: float = 2.0
 
+    # Best-effort safe shutdown. Once the controller is configured, every
+    # normal or exceptional disconnect stages the arm and then folds it.
+    fold_on_disconnect: bool = True
+    fold_staging_goal_time_s: float = 3.0
+    folded_positions: list[float] = field(default_factory=lambda: [0.0] * 7)
+    fold_goal_time_s: float = 3.0
+    fold_max_arm_error_rad: float = 0.12
+    fold_max_gripper_error_m: float = 0.003
+
     # Control loop rate in Hz
     loop_rate: int = 30
 
@@ -123,3 +132,15 @@ class WidowXAIFollowerConfig(RobotConfig):
             raise ValueError("controller_connect_attempts must be at least one")
         if self.controller_connect_retry_delay_s < 0:
             raise ValueError("controller_connect_retry_delay_s must be non-negative")
+        if self.fold_staging_goal_time_s <= 0:
+            raise ValueError("fold_staging_goal_time_s must be positive")
+        if len(self.folded_positions) != len(self.joint_names):
+            raise ValueError("folded_positions must contain one value per joint")
+        if not all(isfinite(value) for value in self.folded_positions):
+            raise ValueError("folded_positions must contain only finite values")
+        if self.fold_goal_time_s <= 0:
+            raise ValueError("fold_goal_time_s must be positive")
+        if self.fold_max_arm_error_rad <= 0:
+            raise ValueError("fold_max_arm_error_rad must be positive")
+        if self.fold_max_gripper_error_m <= 0:
+            raise ValueError("fold_max_gripper_error_m must be positive")

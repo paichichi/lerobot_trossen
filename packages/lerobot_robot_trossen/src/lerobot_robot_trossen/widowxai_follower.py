@@ -32,6 +32,7 @@ class WidowXAIFollower(Robot):
         self.config = config
 
         self.driver = trossen_arm.TrossenArmDriver()
+        self._driver_configured = False
         self.cameras = make_cameras_from_configs(config.cameras)
         self.min_time_to_move = (
             config.min_time_to_move_multiplier / self.config.loop_rate
@@ -97,9 +98,9 @@ class WidowXAIFollower(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return self.driver.get_is_configured() and all(
-            cam.is_connected for cam in self.cameras.values()
-        )
+        # Treat an active controller as connected even if a camera drops. This
+        # ensures LeRobot teardown still calls disconnect() and folds the arm.
+        return self._driver_configured and self.driver.get_is_configured()
 
     def connect(self, calibrate: bool = True) -> None:
         if self.is_connected:
@@ -113,6 +114,7 @@ class WidowXAIFollower(Robot):
                     serv_ip=self.config.ip_address,
                     clear_error=True,
                 )
+                self._driver_configured = True
                 break
             except RuntimeError as error:
                 retry = (
@@ -121,6 +123,7 @@ class WidowXAIFollower(Robot):
                 )
                 with suppress(Exception):
                     self.driver.cleanup()
+                self._driver_configured = False
                 if not retry:
                     raise RuntimeError(
                         "Arm controller connection failed before dataset-home staging; "
@@ -136,13 +139,20 @@ class WidowXAIFollower(Robot):
                 )
                 time.sleep(self.config.controller_connect_retry_delay_s)
                 self.driver = trossen_arm.TrossenArmDriver()
-        if not self.is_calibrated and calibrate:
-            self.calibrate()
+        try:
+            if not self.is_calibrated and calibrate:
+                self.calibrate()
 
-        for cam in self.cameras.values():
-            cam.connect()
+            for cam in self.cameras.values():
+                cam.connect()
 
-        self.configure()
+            self.configure()
+        except Exception:
+            # Once controller configuration succeeds, never leave an arm
+            # active merely because camera setup or home verification failed.
+            with suppress(Exception):
+                self._shutdown_hardware(fold=self.config.fold_on_disconnect)
+            raise
         logger.info(f"{self} connected.")
 
     @property
@@ -341,25 +351,73 @@ class WidowXAIFollower(Robot):
         )
         return {f"{motor}.pos": val for motor, val in goal_pos.items()}
 
+    def _shutdown_hardware(self, *, fold: bool) -> None:
+        fold_error: Exception | None = None
+        if self._driver_configured and fold:
+            try:
+                logger.info(
+                    "Safe shutdown: moving through staged waypoint over %.1f seconds",
+                    self.config.fold_staging_goal_time_s,
+                )
+                self.driver.set_all_modes(trossen_arm.Mode.position)
+                self.driver.set_all_positions(
+                    self.config.staged_positions,
+                    goal_time=self.config.fold_staging_goal_time_s,
+                    blocking=True,
+                )
+                logger.info(
+                    "Safe shutdown: moving to folded pose over %.1f seconds",
+                    self.config.fold_goal_time_s,
+                )
+                self.driver.set_all_positions(
+                    self.config.folded_positions,
+                    goal_time=self.config.fold_goal_time_s,
+                    blocking=True,
+                )
+                observed = [float(value) for value in self.driver.get_all_positions()]
+                arm_error, gripper_error = home_tracking_errors(
+                    self.config.folded_positions,
+                    observed,
+                )
+                if arm_error > self.config.fold_max_arm_error_rad:
+                    raise RuntimeError(
+                        f"Folded-pose arm error {arm_error:.6f} rad exceeds "
+                        f"{self.config.fold_max_arm_error_rad:.6f} rad"
+                    )
+                if gripper_error > self.config.fold_max_gripper_error_m:
+                    raise RuntimeError(
+                        f"Folded-pose gripper error {gripper_error:.6f} m exceeds "
+                        f"{self.config.fold_max_gripper_error_m:.6f} m"
+                    )
+                logger.info(
+                    "Safe shutdown: folded pose verified (arm %.6f rad, gripper %.6f m)",
+                    arm_error,
+                    gripper_error,
+                )
+            except Exception as error:
+                fold_error = error
+                logger.exception("Safe shutdown could not reach the folded pose")
+
+        if self._driver_configured:
+            with suppress(Exception):
+                self.driver.cleanup()
+            self._driver_configured = False
+        for cam in self.cameras.values():
+            if cam.is_connected:
+                with suppress(Exception):
+                    cam.disconnect()
+
+        if fold_error is not None:
+            raise RuntimeError(
+                "Controller was cleaned up, but the arm could not be confirmed at the folded pose"
+            ) from fold_error
+
     def disconnect(self):
-        if not self.is_connected:
+        if not self._driver_configured and not any(
+            cam.is_connected for cam in self.cameras.values()
+        ):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        # Move the arm to the staged positions before disconnecting
-        self.driver.set_all_positions(
-            self.config.staged_positions,
-            goal_time=2.0,
-            blocking=True,
-        )
-        # Move the arm to the sleep position (all positions to 0.0)
-        self.driver.set_all_positions(
-            [0.0] * len(self.config.joint_names),
-            goal_time=2.0,
-            blocking=True,
-        )
-
-        self.driver.cleanup()
-        for cam in self.cameras.values():
-            cam.disconnect()
+        self._shutdown_hardware(fold=self.config.fold_on_disconnect)
 
         logger.info(f"{self} disconnected.")
