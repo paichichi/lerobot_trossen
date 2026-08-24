@@ -122,7 +122,8 @@ fi
 echo "[4/5] Export self-check passed"
 echo "[5/5] Starting hardware rollout"
 echo "Starting official LeRobot rollout for V11. Keep the E-stop ready."
-rollout_dataset_root="$(mktemp -d /tmp/v11_rollout.XXXXXX)"
+rollout_parent="$(mktemp -d /tmp/v11_rollout.XXXXXX)"
+rollout_dataset_root="$rollout_parent/dataset"
 record_command=(
   "$uv_bin" run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
