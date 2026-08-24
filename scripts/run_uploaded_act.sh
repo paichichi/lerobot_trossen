@@ -26,6 +26,37 @@ if [[ "$mode" != download && "$mode" != --execute ]]; then
   exit 2
 fi
 
+run_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+run_dir="$repo_root/output/${model}_${run_stamp}"
+mkdir -p "$run_dir"
+
+finish_run() {
+  exit_code=$?
+  trap - EXIT
+  {
+    printf 'exit_code=%s\n' "$exit_code"
+    printf 'finished_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$run_dir/status.txt"
+  exit "$exit_code"
+}
+trap finish_run EXIT
+
+{
+  printf 'model=%s\n' "$model"
+  printf 'mode=%s\n' "$mode"
+  printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'git_commit=%s\n' "$(git rev-parse HEAD)"
+  printf 'policy_repo=%s\n' "$policy_repo"
+  printf 'policy_revision=%s\n' "$policy_revision"
+  printf 'output_dir=%s\n' "$run_dir"
+  printf 'invocation='
+  printf '%q ' "$0" "$@"
+  printf '\n'
+} > "$run_dir/run_metadata.txt"
+
+exec > >(tee -a "$run_dir/console.log") 2>&1
+echo "All run information will be saved to: $run_dir"
+
 uv sync --extra act
 policy_path="$repo_root/checkpoints/$model"
 uv run --no-sync hf download "$policy_repo" \
@@ -45,6 +76,12 @@ if [[ "$model" == ours_rn50 ]]; then
   fi
 fi
 
+cp "$policy_path/first_frame_report.json" "$run_dir/first_frame_report.json"
+sha256sum "$policy_path/model.safetensors" > "$run_dir/weights.sha256"
+if [[ "$model" == ours_rn50 ]]; then
+  sha256sum "$BACKBONE_CHECKPOINT" >> "$run_dir/weights.sha256"
+fi
+
 uv run --no-sync python -m json.tool "$policy_path/first_frame_report.json"
 if [[ "$mode" != --execute ]]; then
   echo "Downloaded only. The robot was not connected or moved."
@@ -52,21 +89,27 @@ if [[ "$mode" != --execute ]]; then
 fi
 
 echo "Starting physical evaluation: $model. Keep the E-stop ready."
-uv run --no-sync lerobot-record \
-  --robot.discover_packages_path=lerobot_robot_trossen \
-  --robot.type=widowxai_follower_robot \
-  --robot.ip_address=192.168.1.4 \
-  --robot.id=follower \
-  --robot.loop_rate=20 \
-  --robot.min_time_to_move_multiplier=2.0 \
-  --robot.max_relative_target='{"joint_0": 0.07, "joint_1": 0.07, "joint_2": 0.07, "joint_3": 0.07, "joint_4": 0.07, "joint_5": 0.07, "left_carriage_joint": 0.003}' \
-  --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}' \
-  --dataset.repo_id="Chipaipai/act-${model}-carrot-eval" \
-  --dataset.num_episodes=1 \
-  --dataset.episode_time_s=30 \
-  --dataset.reset_time_s=10 \
-  --dataset.single_task="Pick up the carrot and place it in the pan" \
-  --dataset.push_to_hub=false \
-  --display_data=true \
-  --policy.discover_packages_path=lerobot_policy_backbone_act \
+record_command=(
+  uv run --no-sync lerobot-record
+  --robot.discover_packages_path=lerobot_robot_trossen
+  --robot.type=widowxai_follower_robot
+  --robot.ip_address=192.168.1.4
+  --robot.id=follower
+  --robot.loop_rate=20
+  --robot.min_time_to_move_multiplier=2.0
+  --robot.max_relative_target='{"joint_0": 0.07, "joint_1": 0.07, "joint_2": 0.07, "joint_3": 0.07, "joint_4": 0.07, "joint_5": 0.07, "left_carriage_joint": 0.003}'
+  --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
+  --dataset.repo_id="Chipaipai/act-${model}-carrot-eval"
+  --dataset.root="$run_dir/dataset"
+  --dataset.num_episodes=1
+  --dataset.episode_time_s=30
+  --dataset.reset_time_s=10
+  --dataset.single_task="Pick up the carrot and place it in the pan"
+  --dataset.push_to_hub=false
+  --display_data=true
+  --policy.discover_packages_path=lerobot_policy_backbone_act
   --policy.path="$policy_path"
+)
+printf '%q ' "${record_command[@]}" > "$run_dir/resolved_command.txt"
+printf '\n' >> "$run_dir/resolved_command.txt"
+"${record_command[@]}"

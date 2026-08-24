@@ -1,4 +1,5 @@
 # Run from the lerobot_trossen repository root.
+# Every run is saved under output/<model>_<UTC timestamp>/.
 
 # Ours RN50: download and show the safety report (does not move the robot).
 bash scripts/run_uploaded_act.sh ours_rn50
