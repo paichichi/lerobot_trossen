@@ -10,3 +10,9 @@ bash scripts/run_uploaded_act.sh ours_rn50 --execute
 # Official RN18 alternatives:
 # bash scripts/run_uploaded_act.sh rn18
 # bash scripts/run_uploaded_act.sh rn18 --execute
+
+# V11: convert the trained checkpoint to the LeRobot policy contract (no robot motion).
+bash scripts/run_uploaded_v11.sh
+
+# V11: execute through the official LeRobot/Trossen rollout stack.
+# bash scripts/run_uploaded_v11.sh --execute
