@@ -123,6 +123,12 @@ echo "[4/5] Export self-check passed"
 echo "[5/5] Starting hardware rollout"
 "$uv_bin" run --no-sync python -c \
   'import sys, torch; available = torch.cuda.is_available(); print("CUDA device:", torch.cuda.get_device_name(0) if available else "unavailable"); sys.exit(0 if available else 1)'
+blocking_processes="$(pgrep -af '([l]erobot-rollout|scripts/[r]un_policy\.py)' || true)"
+if [[ -n "$blocking_processes" ]]; then
+  echo "Refusing to connect: another policy process is still using robot resources." >&2
+  printf '%s\n' "$blocking_processes" >&2
+  exit 1
+fi
 echo "Starting official LeRobot rollout for V11. Keep the E-stop ready."
 rollout_parent="$(mktemp -d /tmp/v11_rollout.XXXXXX)"
 rollout_dataset_root="$rollout_parent/dataset"
