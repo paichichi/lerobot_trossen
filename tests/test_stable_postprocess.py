@@ -12,6 +12,7 @@ assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 TimeAwareJointTargetFilter = MODULE.TimeAwareJointTargetFilter
+home_tracking_errors = MODULE.home_tracking_errors
 
 
 def make_filter() -> TimeAwareJointTargetFilter:
@@ -67,3 +68,13 @@ def test_stable_filter_holds_gripper_inside_deadband() -> None:
     filtered = target_filter.apply(desired, present, now=1.0)
 
     assert filtered["left_carriage_joint"] == pytest.approx(0.01)
+
+
+def test_home_tracking_errors_separate_arm_and_gripper_units() -> None:
+    target = [0.0] * 7
+    observed = [0.01, -0.02, 0.0, 0.0, 0.0, 0.0, 0.0015]
+
+    arm_error, gripper_error = home_tracking_errors(target, observed)
+
+    assert arm_error == pytest.approx(0.02)
+    assert gripper_error == pytest.approx(0.0015)

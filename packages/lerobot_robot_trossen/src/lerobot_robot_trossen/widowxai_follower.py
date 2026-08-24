@@ -9,7 +9,10 @@ from lerobot.robots.utils import ensure_safe_goal_position
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from lerobot_robot_trossen.config_widowxai_follower import WidowXAIFollowerConfig
-from lerobot_robot_trossen.stable_postprocess import TimeAwareJointTargetFilter
+from lerobot_robot_trossen.stable_postprocess import (
+    TimeAwareJointTargetFilter,
+    home_tracking_errors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +130,48 @@ class WidowXAIFollower(Robot):
     def configure(self) -> None:
         # Set the arm to position control mode
         self.driver.set_all_modes(trossen_arm.Mode.position)
+        startup_positions = (
+            self.config.startup_home_positions
+            if self.config.startup_home_positions is not None
+            else self.config.staged_positions
+        )
+        startup_goal_time = (
+            self.config.startup_home_goal_time_s
+            if self.config.startup_home_positions is not None
+            else 2.0
+        )
+        if self.config.startup_home_positions is not None:
+            logger.info(
+                "Moving to verified dataset home over %.1f seconds before rollout",
+                startup_goal_time,
+            )
         self.driver.set_all_positions(
-            self.config.staged_positions,
-            goal_time=2.0,
+            startup_positions,
+            goal_time=startup_goal_time,
             blocking=True,
         )
+        if self.config.startup_home_positions is not None:
+            time.sleep(self.config.startup_home_settle_time_s)
+            observed = [float(value) for value in self.driver.get_all_positions()]
+            arm_error, gripper_error = home_tracking_errors(
+                self.config.startup_home_positions,
+                observed,
+            )
+            if arm_error > self.config.startup_home_max_arm_error_rad:
+                raise RuntimeError(
+                    f"Dataset-home arm error {arm_error:.6f} rad exceeds "
+                    f"{self.config.startup_home_max_arm_error_rad:.6f} rad"
+                )
+            if gripper_error > self.config.startup_home_max_gripper_error_m:
+                raise RuntimeError(
+                    f"Dataset-home gripper error {gripper_error:.6f} m exceeds "
+                    f"{self.config.startup_home_max_gripper_error_m:.6f} m"
+                )
+            logger.info(
+                "Verified dataset home: arm error %.6f rad, gripper error %.6f m",
+                arm_error,
+                gripper_error,
+            )
         if self.action_filter is not None:
             self.action_filter.reset()
             logger.info(

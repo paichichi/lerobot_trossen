@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from math import isfinite
 
 import numpy as np
 from lerobot.cameras import CameraConfig
@@ -30,6 +31,15 @@ class WidowXAIFollowerConfig(RobotConfig):
     gripper_max_velocity_m_s: float | None = None
     gripper_deadband_m: float = 0.0
     postprocess_max_dt_multiplier: float = 2.0
+
+    # Optional dataset-home staging before the first rollout observation.
+    # Unlike staged_positions, this pose is also verified and becomes the
+    # initial position captured by LeRobot for episode resets and shutdown.
+    startup_home_positions: list[float] | None = None
+    startup_home_goal_time_s: float = 10.0
+    startup_home_settle_time_s: float = 1.0
+    startup_home_max_arm_error_rad: float = 0.03
+    startup_home_max_gripper_error_m: float = 0.002
 
     # Control loop rate in Hz
     loop_rate: int = 30
@@ -91,3 +101,16 @@ class WidowXAIFollowerConfig(RobotConfig):
             raise ValueError("gripper_deadband_m must be non-negative")
         if self.postprocess_max_dt_multiplier < 1.0:
             raise ValueError("postprocess_max_dt_multiplier must be at least one")
+        if self.startup_home_positions is not None:
+            if len(self.startup_home_positions) != len(self.joint_names):
+                raise ValueError("startup_home_positions must contain one value per joint")
+            if not all(isfinite(value) for value in self.startup_home_positions):
+                raise ValueError("startup_home_positions must contain only finite values")
+        if self.startup_home_goal_time_s <= 0:
+            raise ValueError("startup_home_goal_time_s must be positive")
+        if self.startup_home_settle_time_s < 0:
+            raise ValueError("startup_home_settle_time_s must be non-negative")
+        if self.startup_home_max_arm_error_rad <= 0:
+            raise ValueError("startup_home_max_arm_error_rad must be positive")
+        if self.startup_home_max_gripper_error_m <= 0:
+            raise ValueError("startup_home_max_gripper_error_m must be positive")

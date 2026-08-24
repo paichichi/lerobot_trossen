@@ -5,6 +5,20 @@ def _clip(value: float, lower: float, upper: float) -> float:
     return min(max(value, lower), upper)
 
 
+def home_tracking_errors(
+    target: list[float], observed: list[float]
+) -> tuple[float, float]:
+    """Return peak arm and gripper errors for a seven-joint home pose."""
+    if len(target) != 7 or len(observed) != 7:
+        raise ValueError("Home target and observation must each contain seven values")
+    arm_error = max(
+        abs(actual - expected)
+        for actual, expected in zip(observed[:6], target[:6], strict=True)
+    )
+    gripper_error = abs(observed[6] - target[6])
+    return arm_error, gripper_error
+
+
 class TimeAwareJointTargetFilter:
     """Rate-limit absolute joint targets without changing their representation."""
 
