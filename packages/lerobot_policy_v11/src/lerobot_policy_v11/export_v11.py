@@ -4,7 +4,9 @@ import argparse
 from pathlib import Path
 
 import torch
+from lerobot.configs import PreTrainedConfig
 from lerobot.configs.types import FeatureType, PolicyFeature
+from lerobot.policies.factory import make_pre_post_processors
 
 from .configuration_v11 import V11Config
 from .modeling_v11 import V11Policy
@@ -83,6 +85,27 @@ def export_checkpoint(args: argparse.Namespace) -> None:
     preprocessor, postprocessor = make_v11_pre_post_processors(config)
     preprocessor.save_pretrained(args.output_dir)
     postprocessor.save_pretrained(args.output_dir)
+
+    # Exercise the same strict load and processor path used by lerobot-rollout
+    # before the official runtime is allowed to connect to physical hardware.
+    restored_config = PreTrainedConfig.from_pretrained(args.output_dir)
+    restored_policy = V11Policy.from_pretrained(
+        args.output_dir, config=restored_config, strict=True
+    )
+    make_pre_post_processors(
+        restored_config,
+        pretrained_path=str(args.output_dir),
+    )
+    synthetic_observation = {
+        "observation.images.cam_main": torch.zeros(
+            (1, 3, 480, 640), dtype=torch.float32
+        ),
+        "observation.state": torch.zeros((1, 7), dtype=torch.float32),
+    }
+    synthetic_action = restored_policy.select_action(synthetic_observation)
+    if synthetic_action.shape != (1, 7) or not torch.isfinite(synthetic_action).all():
+        raise RuntimeError("Exported V11 policy failed its synthetic action check")
+    print("V11 LeRobot export self-check: PASS")
 
 
 def main() -> None:
