@@ -1,18 +1,5 @@
-# Run from the lerobot_trossen repository root.
-# Every run is saved under output/<model>_<UTC timestamp>/.
-
-# Ours RN50: download and show the safety report (does not move the robot).
-bash scripts/run_uploaded_act.sh ours_rn50
-
-# Ours RN50: real-robot evaluation. E-stop must be ready.
-bash scripts/run_uploaded_act.sh ours_rn50 --execute
-
-# Official RN18 alternatives:
-# bash scripts/run_uploaded_act.sh rn18
-# bash scripts/run_uploaded_act.sh rn18 --execute
-
-# V11: convert the trained checkpoint to the LeRobot policy contract (no robot motion).
-bash scripts/run_uploaded_v11.sh
-
-# V11: execute through the official LeRobot/Trossen rollout stack.
-# bash scripts/run_uploaded_v11.sh --execute
+cd ~/lerobot_trossen
+git fetch origin
+git switch stable-postprocess
+git pull --ff-only origin stable-postprocess
+bash scripts/run_uploaded_act.sh rn18 --execute

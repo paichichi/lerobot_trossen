@@ -23,6 +23,14 @@ class WidowXAIFollowerConfig(RobotConfig):
     # A recommended starting value is 3.0.
     min_time_to_move_multiplier: float = 3.0
 
+    # Optional time-aware smoothing for absolute joint-position policies. These
+    # limits run before max_relative_target, which remains the final safety cap.
+    arm_max_velocity_rad_s: float | None = None
+    arm_max_acceleration_rad_s2: float | None = None
+    gripper_max_velocity_m_s: float | None = None
+    gripper_deadband_m: float = 0.0
+    postprocess_max_dt_multiplier: float = 2.0
+
     # Control loop rate in Hz
     loop_rate: int = 30
 
@@ -66,3 +74,20 @@ class WidowXAIFollowerConfig(RobotConfig):
     staged_positions: list[float] = field(
         default_factory=lambda: [0, np.pi / 3, np.pi / 6, np.pi / 5, 0, 0, 0]
     )
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        limits = (
+            self.arm_max_velocity_rad_s,
+            self.arm_max_acceleration_rad_s2,
+            self.gripper_max_velocity_m_s,
+        )
+        enabled = [value is not None for value in limits]
+        if any(enabled) and not all(enabled):
+            raise ValueError("All stable postprocess velocity/acceleration limits are required")
+        if any(value is not None and value <= 0 for value in limits):
+            raise ValueError("Stable postprocess limits must be positive")
+        if self.gripper_deadband_m < 0:
+            raise ValueError("gripper_deadband_m must be non-negative")
+        if self.postprocess_max_dt_multiplier < 1.0:
+            raise ValueError("postprocess_max_dt_multiplier must be at least one")
