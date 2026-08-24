@@ -1,5 +1,6 @@
 import logging
 import time
+from contextlib import suppress
 from typing import Any
 
 import trossen_arm
@@ -12,6 +13,7 @@ from lerobot_robot_trossen.config_widowxai_follower import WidowXAIFollowerConfi
 from lerobot_robot_trossen.stable_postprocess import (
     TimeAwareJointTargetFilter,
     home_tracking_errors,
+    is_transient_controller_transport_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,12 +105,37 @@ class WidowXAIFollower(Robot):
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        self.driver.configure(
-            model=trossen_arm.Model.wxai_v0,
-            end_effector=trossen_arm.StandardEndEffector.wxai_v0_follower,
-            serv_ip=self.config.ip_address,
-            clear_error=True,
-        )
+        for attempt in range(1, self.config.controller_connect_attempts + 1):
+            try:
+                self.driver.configure(
+                    model=trossen_arm.Model.wxai_v0,
+                    end_effector=trossen_arm.StandardEndEffector.wxai_v0_follower,
+                    serv_ip=self.config.ip_address,
+                    clear_error=True,
+                )
+                break
+            except RuntimeError as error:
+                retry = (
+                    attempt < self.config.controller_connect_attempts
+                    and is_transient_controller_transport_error(error)
+                )
+                with suppress(Exception):
+                    self.driver.cleanup()
+                if not retry:
+                    raise RuntimeError(
+                        "Arm controller connection failed before dataset-home staging; "
+                        "no home command or policy action was sent."
+                    ) from error
+                logger.warning(
+                    "Transient arm-controller connection failure (%d/%d); "
+                    "rebuilding the driver and retrying in %.1f seconds: %s",
+                    attempt,
+                    self.config.controller_connect_attempts,
+                    self.config.controller_connect_retry_delay_s,
+                    error,
+                )
+                time.sleep(self.config.controller_connect_retry_delay_s)
+                self.driver = trossen_arm.TrossenArmDriver()
         if not self.is_calibrated and calibrate:
             self.calibrate()
 

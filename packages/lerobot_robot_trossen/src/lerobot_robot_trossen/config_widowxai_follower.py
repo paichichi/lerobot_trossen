@@ -41,6 +41,11 @@ class WidowXAIFollowerConfig(RobotConfig):
     startup_home_max_arm_error_rad: float = 0.03
     startup_home_max_gripper_error_m: float = 0.002
 
+    # The controller can briefly retain a stale TCP session after an aborted
+    # process. Retry only transient transport failures, before any home motion.
+    controller_connect_attempts: int = 3
+    controller_connect_retry_delay_s: float = 2.0
+
     # Control loop rate in Hz
     loop_rate: int = 30
 
@@ -114,3 +119,7 @@ class WidowXAIFollowerConfig(RobotConfig):
             raise ValueError("startup_home_max_arm_error_rad must be positive")
         if self.startup_home_max_gripper_error_m <= 0:
             raise ValueError("startup_home_max_gripper_error_m must be positive")
+        if self.controller_connect_attempts < 1:
+            raise ValueError("controller_connect_attempts must be at least one")
+        if self.controller_connect_retry_delay_s < 0:
+            raise ValueError("controller_connect_retry_delay_s must be non-negative")

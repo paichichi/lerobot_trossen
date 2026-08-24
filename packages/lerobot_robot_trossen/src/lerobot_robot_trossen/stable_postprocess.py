@@ -19,6 +19,22 @@ def home_tracking_errors(
     return arm_error, gripper_error
 
 
+def is_transient_controller_transport_error(error: BaseException) -> bool:
+    """Recognize controller transport failures that are safe to reconnect."""
+    message = str(error).lower()
+    transport_failure = (
+        "failed to read tcp message" in message
+        or "failed to read udp message" in message
+        or "failed to connect" in message
+    )
+    transient_reason = (
+        "resource temporarily unavailable" in message
+        or "timed out" in message
+        or "timeout" in message
+    )
+    return transport_failure and transient_reason
+
+
 class TimeAwareJointTargetFilter:
     """Rate-limit absolute joint targets without changing their representation."""
 

@@ -13,6 +13,7 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 TimeAwareJointTargetFilter = MODULE.TimeAwareJointTargetFilter
 home_tracking_errors = MODULE.home_tracking_errors
+is_transient_controller_transport_error = MODULE.is_transient_controller_transport_error
 
 
 def make_filter() -> TimeAwareJointTargetFilter:
@@ -78,3 +79,15 @@ def test_home_tracking_errors_separate_arm_and_gripper_units() -> None:
 
     assert arm_error == pytest.approx(0.02)
     assert gripper_error == pytest.approx(0.0015)
+
+
+def test_controller_retry_only_accepts_transient_transport_failures() -> None:
+    assert is_transient_controller_transport_error(
+        RuntimeError(
+            "Failed to read TCP message from 192.168.1.4:50001 due to "
+            "Resource temporarily unavailable"
+        )
+    )
+    assert not is_transient_controller_transport_error(
+        RuntimeError("Controller reported an over-current error")
+    )
