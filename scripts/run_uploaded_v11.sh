@@ -33,27 +33,20 @@ raw_policy="$asset_root/$policy_file"
 backbone_checkpoint="$asset_root/$backbone_file"
 policy_path="$repo_root/checkpoints/v11_ours_rn50"
 
-run_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-run_dir="$repo_root/output/v11_ours_rn50_${run_stamp}"
-text_log="$run_dir/v11_official_${run_stamp}.txt"
-mkdir -p "$run_dir"
+text_log="$repo_root/output/v11_latest.txt"
+mkdir -p "$repo_root/output"
 
 finish_run() {
   exit_code=$?
   trap - EXIT
-  {
-    printf 'exit_code=%s\n' "$exit_code"
-    printf 'finished_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  } > "$run_dir/status.txt"
-  printf 'Run finished with exit code %s. Status: %s\n' \
-    "$exit_code" "$run_dir/status.txt"
+  printf 'Run finished with exit code %s at %s\n' \
+    "$exit_code" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   exit "$exit_code"
 }
 trap finish_run EXIT
 
-exec > >(tee -a "$text_log") 2>&1
-echo "Complete text log: $text_log"
-echo "All run information will be saved to: $run_dir"
+exec > >(tee "$text_log") 2>&1
+echo "V11 output log: $text_log"
 
 echo "[1/5] Checking the locked official LeRobot environment"
 if command -v uv >/dev/null 2>&1; then
@@ -120,19 +113,6 @@ echo "[3/5] Converting V11 to the LeRobot policy contract"
   --backbone-source-root "$backbone_source_root" \
   --tcc-real-robot-source-root "$tcc_real_robot_root"
 
-{
-  printf 'model=v11_ours_rn50\n'
-  printf 'mode=%s\n' "$mode"
-  printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf 'git_commit=%s\n' "$(git rev-parse HEAD)"
-  printf 'policy_revision=%s\n' "$policy_revision"
-  printf 'raw_policy=%s\n' "$raw_policy"
-  printf 'policy_path=%s\n' "$policy_path"
-  printf 'text_log=%s\n' "$text_log"
-} > "$run_dir/run_metadata.txt"
-sha256sum "$raw_policy" "$backbone_checkpoint" "$policy_path/model.safetensors" \
-  > "$run_dir/weights.sha256"
-
 if [[ "$mode" != --execute ]]; then
   echo "[4/5] Export self-check passed"
   echo "Converted and validated only. The robot was not connected or moved."
@@ -142,6 +122,7 @@ fi
 echo "[4/5] Export self-check passed"
 echo "[5/5] Starting hardware rollout"
 echo "Starting official LeRobot rollout for V11. Keep the E-stop ready."
+rollout_dataset_root="$(mktemp -d /tmp/v11_rollout.XXXXXX)"
 record_command=(
   "$uv_bin" run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
@@ -157,7 +138,7 @@ record_command=(
   --task="Pick up the carrot and place it in the pan"
   --return_to_initial_position=true
   --dataset.repo_id=Chipaipai/rollout_v11-ours-rn50-carrot-eval
-  --dataset.root="$run_dir/dataset"
+  --dataset.root="$rollout_dataset_root"
   --dataset.num_episodes=1
   --dataset.episode_time_s=30
   --dataset.reset_time_s=10
@@ -166,6 +147,4 @@ record_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
-printf '%q ' "${record_command[@]}" > "$run_dir/resolved_command.txt"
-printf '\n' >> "$run_dir/resolved_command.txt"
 "${record_command[@]}"
