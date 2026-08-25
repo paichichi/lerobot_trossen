@@ -97,11 +97,28 @@ hardware_legacy_lock_holders() {
   done | sort -n -u
 }
 
+hardware_pid_holds_legacy_lock() {
+  local pid="$1"
+  local repo_root="$2"
+  local legacy_lock="$3"
+  local fd_path target
+
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  [[ "$(hardware_process_cwd "$pid")" == "$repo_root" ]] || return 1
+  for fd_path in "/proc/$pid"/fd/*; do
+    [[ -e "$fd_path" ]] || continue
+    target="$(readlink "$fd_path" 2>/dev/null || true)"
+    [[ "$target" == "$legacy_lock" ]] && return 0
+  done
+  return 1
+}
+
 hardware_refresh_legacy_flock() {
   local repo_root="$1"
   local legacy_lock="$repo_root/output/.hardware_rollout.lock"
   local holder_pid process_command process_group
-  local -a holders=()
+  local -a holders=() remaining_holders=()
   local attempt
 
   [[ -e "$legacy_lock" ]] || return 0
@@ -128,7 +145,13 @@ hardware_refresh_legacy_flock() {
     # they do not control the arm, force-closing only those verified helpers is
     # safe and releases their inherited descriptor.
     for attempt in {1..50}; do
-      mapfile -t holders < <(hardware_legacy_lock_holders "$repo_root" "$legacy_lock")
+      remaining_holders=()
+      for holder_pid in "${holders[@]}"; do
+        if hardware_pid_holds_legacy_lock "$holder_pid" "$repo_root" "$legacy_lock"; then
+          remaining_holders+=("$holder_pid")
+        fi
+      done
+      holders=("${remaining_holders[@]}")
       ((${#holders[@]} == 0)) && break
       sleep 0.1
     done
@@ -145,7 +168,13 @@ hardware_refresh_legacy_flock() {
     # Actual rollout processes still receive up to 30 seconds to run their
     # driver teardown. They are never SIGKILLed by this migration.
     for attempt in {1..300}; do
-      mapfile -t holders < <(hardware_legacy_lock_holders "$repo_root" "$legacy_lock")
+      remaining_holders=()
+      for holder_pid in "${holders[@]}"; do
+        if hardware_pid_holds_legacy_lock "$holder_pid" "$repo_root" "$legacy_lock"; then
+          remaining_holders+=("$holder_pid")
+        fi
+      done
+      holders=("${remaining_holders[@]}")
       ((${#holders[@]} == 0)) && break
       sleep 0.1
     done
