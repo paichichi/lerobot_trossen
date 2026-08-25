@@ -9,8 +9,8 @@ from pathlib import Path
 
 import torch
 from lerobot.configs import FeatureType, PolicyFeature
-from lerobot_policy_backbone_act import NativeRN50ACTConfig
-from lerobot_policy_backbone_act.modeling_native_rn50_act import NativeRN50ACTPolicy
+from lerobot_policy_backbone_act import ACTRN50FullConfig
+from lerobot_policy_backbone_act.modeling_native_rn50_act import ACTRN50FullPolicy
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,7 +28,7 @@ def main() -> None:
     os.environ["BACKBONE_CHECKPOINT"] = str(args.backbone_checkpoint.resolve())
     os.environ["BACKBONE_SOURCE_ROOT"] = str(args.backbone_source_root.resolve())
 
-    config = NativeRN50ACTConfig(
+    config = ACTRN50FullConfig(
         input_features={
             "observation.state": PolicyFeature(FeatureType.STATE, (7,)),
             "observation.images.cam_main": PolicyFeature(
@@ -46,7 +46,7 @@ def main() -> None:
         chunk_size=40,
         n_action_steps=10,
     )
-    policy = NativeRN50ACTPolicy(config).cuda().train()
+    policy = ACTRN50FullPolicy(config).cuda().train()
     batch = {
         "observation.state": torch.randn(args.batch_size, 7, device="cuda"),
         "observation.images.cam_main": torch.randint(

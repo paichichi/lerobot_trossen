@@ -60,22 +60,21 @@ original ACT training code, complete episodes are shuffled with a fixed seed,
 80% per task are used for training, 20% for validation, and the saved checkpoint
 with the lowest validation loss is selected for robot evaluation.
 
-### Native RN50 ACT
+### ACT-RN50-full
 
-The `native_rn50_act` policy is the strict RN50 counterpart to the working
-official RN18 baseline. It keeps the complete official ACT architecture
-(`dim_model=512`, 8 heads, 3200-wide feed-forward layers, four Transformer
-encoder layers, four VAE encoder layers), both cameras, 40-action chunks, and
-10 queued actions. Only the visual backbone is replaced by the trained
-`ours_rn50` and fine-tuned end to end.
+The `act_rn50_full` policy is designed around the trained `ours_rn50`, rather
+than as an RN18 parity adapter. Its default capacity is 512 dimensions, 8
+heads, a 3200-wide feed-forward network, four Transformer encoder layers, and
+four VAE encoder layers. These are defaults, not compatibility locks.
 
-This configuration is locked to native 480x640 RGB input. It preserves the
-4:3 geometry and exposes the RN50 layer4 spatial map without the legacy
-224x224 square resize. Configuration validation rejects reduced resolution,
-frozen vision weights, or ACT-lite dimensions. Train it with:
+The visual contract remains strict: dual native 480x640 RGB views, ImageNet
+normalization inside the RN50, a spatial layer4 map without global pooling,
+and end-to-end backbone fine-tuning. The training recipe uses conservative
+differential learning rates, cosine decay with warmup, image augmentation,
+and best-validation checkpoint selection to reduce overfitting on 100 demos.
 
 ```shell
-bash scripts/train_native_rn50_act.sh
+bash scripts/train_act_rn50_full.sh
 ```
 
 ### Teleoperation Script

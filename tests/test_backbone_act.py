@@ -7,7 +7,7 @@ import torch
 from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature
 from lerobot_policy_backbone_act.configuration_backbone_act import BackboneACTConfig
 from lerobot_policy_backbone_act.configuration_native_rn50_act import (
-    NativeRN50ACTConfig,
+    ACTRN50FullConfig,
 )
 from lerobot_policy_backbone_act.modeling_backbone_act import (
     BackboneACTPolicy,
@@ -78,7 +78,7 @@ def test_native_rn50_preprocess_preserves_480x640_geometry() -> None:
 
 
 def test_native_rn50_is_locked_to_full_official_act() -> None:
-    config = NativeRN50ACTConfig()
+    config = ACTRN50FullConfig()
 
     assert config.backbone_image_height == 480
     assert config.backbone_image_width == 640
@@ -98,18 +98,29 @@ def test_native_rn50_is_locked_to_full_official_act() -> None:
         ("backbone_image_height", 224),
         ("backbone_image_width", 224),
         ("freeze_vision_backbone", True),
-        ("dim_model", 256),
-        ("n_heads", 4),
-        ("dim_feedforward", 1024),
-        ("n_encoder_layers", 2),
-        ("n_vae_encoder_layers", 2),
     ],
 )
-def test_native_rn50_rejects_lite_or_resized_configuration(
+def test_act_rn50_full_rejects_broken_visual_contract(
     override: str, value: object
 ) -> None:
-    with pytest.raises(ValueError, match="locked to native 480x640"):
-        NativeRN50ACTConfig(**{override: value})
+    with pytest.raises(ValueError, match="native trainable ours RN50 contract"):
+        ACTRN50FullConfig(**{override: value})
+
+
+def test_act_rn50_full_capacity_is_tunable_without_changing_visual_contract() -> None:
+    config = ACTRN50FullConfig(
+        dim_model=768,
+        n_heads=12,
+        dim_feedforward=4096,
+        n_encoder_layers=6,
+        n_vae_encoder_layers=6,
+    )
+
+    assert config.dim_model == 768
+    assert config.n_heads == 12
+    assert config.dim_feedforward == 4096
+    assert config.n_encoder_layers == 6
+    assert config.n_vae_encoder_layers == 6
 
 
 def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot_policy_backbone_act.modeling_backbone_act import BackboneACTPolicy
-from lerobot_policy_backbone_act.modeling_native_rn50_act import NativeRN50ACTPolicy
+from lerobot_policy_backbone_act.modeling_native_rn50_act import ACTRN50FullPolicy
 
 REPO_ROOT = Path(__file__).parents[1]
 EVAL_LAUNCHERS = (
@@ -83,7 +83,7 @@ def test_base_rollouts_do_not_create_evaluation_datasets() -> None:
 
 
 def test_rn50_only_replaces_the_official_act_visual_input_path() -> None:
-    policy_classes = (BackboneACTPolicy, NativeRN50ACTPolicy)
+    policy_classes = (BackboneACTPolicy, ACTRN50FullPolicy)
     assert all(issubclass(policy_class, ACTPolicy) for policy_class in policy_classes)
     action_methods = {
         "forward",
