@@ -9,6 +9,7 @@ fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/hardware_rollout_lifecycle.sh"
 
 policy_revision=56690ddea1023ebe840c2d0dd1a07cfad67377b0
 policy_file=policies_v11_end_to_end_rn50/ours_rn50/checkpoint_100000.pt
@@ -21,12 +22,15 @@ mkdir -p "$repo_root/output"
 
 finish_run() {
   exit_code=$?
-  trap - EXIT
+  trap - EXIT INT TERM
+  hardware_rollout_cleanup "$repo_root" || exit_code=1
   printf 'Run finished with exit code %s at %s\n' \
     "$exit_code" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   exit "$exit_code"
 }
 trap finish_run EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 exec > >(tee "$text_log") 2>&1
 echo "V11 output log: $text_log"
@@ -93,6 +97,7 @@ echo "[5/5] Starting hardware rollout"
 echo "Starting official LeRobot base rollout for V11. Keep the E-stop ready."
 echo "This policy has no task-completion output; press Ctrl+C after success."
 echo "Action timing: native 20 Hz policy and 20 Hz driver loop; no extra smoothing."
+hardware_rollout_prepare "$repo_root"
 record_command=(
   "$uv_bin" run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
@@ -128,4 +133,4 @@ record_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
-"${record_command[@]}"
+hardware_rollout_run "${record_command[@]}"

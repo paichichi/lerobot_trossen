@@ -5,6 +5,7 @@ model="${1:-ours_rn50}"
 mode="${2:-download}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/hardware_rollout_lifecycle.sh"
 
 case "$model" in
   ours_rn50)
@@ -32,7 +33,8 @@ mkdir -p "$run_dir"
 
 finish_run() {
   exit_code=$?
-  trap - EXIT
+  trap - EXIT INT TERM
+  hardware_rollout_cleanup "$repo_root" || exit_code=1
   {
     printf 'exit_code=%s\n' "$exit_code"
     printf 'finished_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -40,6 +42,8 @@ finish_run() {
   exit "$exit_code"
 }
 trap finish_run EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 {
   printf 'model=%s\n' "$model"
@@ -92,6 +96,7 @@ fi
 
 echo "Starting base-mode physical evaluation: $model. Keep the E-stop ready."
 echo "This ACT checkpoint has no task-completion output; press Ctrl+C after success."
+hardware_rollout_prepare "$repo_root"
 record_command=(
   uv run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
@@ -133,4 +138,4 @@ record_command=(
 )
 printf '%q ' "${record_command[@]}" > "$run_dir/resolved_command.txt"
 printf '\n' >> "$run_dir/resolved_command.txt"
-"${record_command[@]}"
+hardware_rollout_run "${record_command[@]}"
