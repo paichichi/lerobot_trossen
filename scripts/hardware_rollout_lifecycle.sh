@@ -123,7 +123,28 @@ hardware_refresh_legacy_flock() {
         kill -TERM "$holder_pid" 2>/dev/null || true
       fi
     done
-    for attempt in {1..350}; do
+    # Give normal TERM/SIGINT cleanup five seconds. Old non-driver shell/tee
+    # helpers can ignore TERM while waiting on an already-dead child; because
+    # they do not control the arm, force-closing only those verified helpers is
+    # safe and releases their inherited descriptor.
+    for attempt in {1..50}; do
+      mapfile -t holders < <(hardware_legacy_lock_holders "$repo_root" "$legacy_lock")
+      ((${#holders[@]} == 0)) && break
+      sleep 0.1
+    done
+    if ((${#holders[@]})); then
+      for holder_pid in "${holders[@]}"; do
+        process_command="$(hardware_process_command "$holder_pid")"
+        if [[ "$process_command" != *lerobot-rollout* \
+          && "$process_command" != *lerobot_rollout* ]]; then
+          echo "Force-closing stale non-driver lock helper $holder_pid"
+          kill -KILL "$holder_pid" 2>/dev/null || true
+        fi
+      done
+    fi
+    # Actual rollout processes still receive up to 30 seconds to run their
+    # driver teardown. They are never SIGKILLed by this migration.
+    for attempt in {1..300}; do
       mapfile -t holders < <(hardware_legacy_lock_holders "$repo_root" "$legacy_lock")
       ((${#holders[@]} == 0)) && break
       sleep 0.1
