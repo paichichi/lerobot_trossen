@@ -3,6 +3,9 @@
 # Physical evaluation uses LeRobot base mode: no rollout dataset or video is recorded.
 # Press Ctrl+C after the task; official teardown returns to the initial position.
 
+# One-click cleanup if a previous LeRobot/Trossen rollout is still running.
+bash scripts/cleanup_trossen_processes.sh
+
 # Ours RN50: download and show the safety report (does not move the robot).
 bash scripts/run_uploaded_act.sh ours_rn50
 
