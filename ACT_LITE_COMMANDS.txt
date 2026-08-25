@@ -1,16 +1,39 @@
-cd ~/lerobot_trossen
-git fetch origin
-git switch stable-postprocess
-git pull --ff-only origin stable-postprocess
+cd /home/robotarm
 
-# End-to-end ACT RN50 (active command)
-# bash scripts/run_uploaded_act.sh ours_rn50
-bash scripts/run_uploaded_act.sh ours_rn50 --execute
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+if [ -d /home/robotarm/lerobot_trossen ]; then
+  mv /home/robotarm/lerobot_trossen \
+    "/home/robotarm/lerobot_trossen_backup_${stamp}"
+fi
 
-# V11 alternative
-# bash scripts/run_uploaded_v11.sh
-# bash scripts/run_uploaded_v11.sh --execute
+git clone \
+  --branch stable-postprocess \
+  --single-branch \
+  https://github.com/paichichi/lerobot_trossen.git \
+  /home/robotarm/lerobot_trossen
 
-# Official RN18 alternative (uncomment exactly one command when needed)
-# bash scripts/run_uploaded_act.sh rn18
+cd /home/robotarm/lerobot_trossen
+
+export PATH="/home/robotarm/.local/bin:$PATH"
+uv sync --locked --extra act
+
+PYTHONPATH="$PWD:$PWD/packages/lerobot_policy_v11/src:$PWD/packages/lerobot_policy_backbone_act/src" \
+  .venv/bin/pytest -q \
+  tests/test_base_eval_launchers.py \
+  tests/test_backbone_act.py \
+  tests/test_v11_policy.py
+
+bash scripts/run_uploaded_act.sh rn18
+bash scripts/run_uploaded_act.sh ours_rn50
+bash scripts/run_uploaded_v11.sh
+
+# Power-cycle the Arm Controller before running one of the commands below.
+
+# Official RN18 real-robot evaluation:
 # bash scripts/run_uploaded_act.sh rn18 --execute
+
+# End-to-end RN50 real-robot evaluation:
+# bash scripts/run_uploaded_act.sh ours_rn50 --execute
+
+# V11 real-robot evaluation:
+# bash scripts/run_uploaded_v11.sh --execute
