@@ -21,19 +21,25 @@ case "$model" in
     # avoid the lag introduced by velocity/acceleration filters.
     max_relative_target=0.06
     ;;
+  rn50_full_36k)
+    policy_repo=Chipaipai/act-rn50-full-carrot-100
+    policy_revision=e9fb5faf5dcd5ea75112e736997dd98bdba9833a
+    policy_dir_name=act_rn50_full_36k
+    max_relative_target=0.06
+    ;;
   rn18)
     policy_repo=Chipaipai/act-official-rn18-carrot-100
     policy_revision=8f3cf3b8358d46928bc12271027787cc1f7b0499
     policy_dir_name=rn18
     ;;
   *)
-    echo "usage: $0 {rn50_full|ours_rn50|rn18} [--execute]" >&2
+    echo "usage: $0 {rn50_full|rn50_full_36k|ours_rn50|rn18} [--execute]" >&2
     exit 2
     ;;
 esac
 
 if [[ "$mode" != download && "$mode" != --execute ]]; then
-  echo "usage: $0 {rn50_full|ours_rn50|rn18} [--execute]" >&2
+  echo "usage: $0 {rn50_full|rn50_full_36k|ours_rn50|rn18} [--execute]" >&2
   exit 2
 fi
 
@@ -74,7 +80,7 @@ uv run --no-sync hf download "$policy_repo" \
   --revision "$policy_revision" \
   --local-dir "$policy_path"
 
-if [[ "$model" == ours_rn50 || "$model" == rn50_full ]]; then
+if [[ "$model" == ours_rn50 || "$model" == rn50_full || "$model" == rn50_full_36k ]]; then
   export BACKBONE_SOURCE_ROOT="${BACKBONE_SOURCE_ROOT:-/home/robotarm/TCC-core}"
   export BACKBONE_CHECKPOINT="$repo_root/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt"
   uv run --no-sync hf download Chipaipai/tcc-core-real-robot-policies \
@@ -88,7 +94,7 @@ if [[ "$model" == ours_rn50 || "$model" == rn50_full ]]; then
 fi
 
 sha256sum "$policy_path/model.safetensors" > "$run_dir/weights.sha256"
-if [[ "$model" == ours_rn50 || "$model" == rn50_full ]]; then
+if [[ "$model" == ours_rn50 || "$model" == rn50_full || "$model" == rn50_full_36k ]]; then
   sha256sum "$BACKBONE_CHECKPOINT" >> "$run_dir/weights.sha256"
 fi
 

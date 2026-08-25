@@ -17,6 +17,12 @@ bash scripts/run_uploaded_act.sh rn50_full
 # Evaluate ACT-RN50-full 6k. Keep the E-stop ready.
 bash scripts/run_uploaded_act.sh rn50_full --execute
 
+# Download ACT-RN50-full 36k without moving the robot.
+bash scripts/run_uploaded_act.sh rn50_full_36k
+
+# Evaluate ACT-RN50-full 36k. Keep the E-stop ready.
+bash scripts/run_uploaded_act.sh rn50_full_36k --execute
+
 # Previous ACT-lite RN50 comparison.
 # bash scripts/run_uploaded_act.sh ours_rn50
 # bash scripts/run_uploaded_act.sh ours_rn50 --execute
