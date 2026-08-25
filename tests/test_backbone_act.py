@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -121,6 +122,24 @@ def test_act_rn50_full_capacity_is_tunable_without_changing_visual_contract() ->
     assert config.dim_feedforward == 4096
     assert config.n_encoder_layers == 6
     assert config.n_vae_encoder_layers == 6
+
+
+def test_act_rn50_full_augmentation_is_photometric_only() -> None:
+    config_path = (
+        Path(__file__).parents[1]
+        / "configs"
+        / "act_rn50_full_image_transforms.json"
+    )
+    transforms = json.loads(config_path.read_text())
+
+    assert set(transforms) == {
+        "brightness",
+        "contrast",
+        "saturation",
+        "hue",
+        "sharpness",
+    }
+    assert all(transform["type"] != "RandomAffine" for transform in transforms.values())
 
 
 def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:
