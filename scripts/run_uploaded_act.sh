@@ -33,7 +33,7 @@ mkdir -p "$run_dir"
 
 finish_run() {
   exit_code=$?
-  trap - EXIT INT TERM
+  trap - EXIT HUP INT TERM
   hardware_rollout_cleanup "$repo_root" || exit_code=1
   {
     printf 'exit_code=%s\n' "$exit_code"
@@ -42,6 +42,7 @@ finish_run() {
   exit "$exit_code"
 }
 trap finish_run EXIT
+trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
