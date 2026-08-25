@@ -121,9 +121,6 @@ rollout_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
-if [[ "$model" == rn50_full ]]; then
-  rollout_command+=(--policy.discover_packages_path=lerobot_policy_backbone_act)
-fi
 printf '%q ' "${rollout_command[@]}" > "$run_dir/resolved_command.txt"
 printf '\n' >> "$run_dir/resolved_command.txt"
 "${rollout_command[@]}"
