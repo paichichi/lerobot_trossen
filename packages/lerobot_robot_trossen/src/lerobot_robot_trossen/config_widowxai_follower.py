@@ -74,6 +74,12 @@ class WidowXAIFollowerConfig(RobotConfig):
 
     # cameras
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
+    # Reject stale frames and restart only the failed camera when the RealSense
+    # background capture thread stops. The arm controller remains connected and
+    # holds its last commanded target while recovery is in progress.
+    camera_frame_max_age_ms: float = 500.0
+    camera_reconnect_attempts: int = 3
+    camera_reconnect_delay_s: float = 1.0
     # Troubleshooting: If one of your IntelRealSense cameras freeze during
     # data recording due to bandwidth limit, you might need to plug the camera
     # on another USB hub or PCIe card.
@@ -132,6 +138,12 @@ class WidowXAIFollowerConfig(RobotConfig):
             raise ValueError("controller_connect_attempts must be at least one")
         if self.controller_connect_retry_delay_s < 0:
             raise ValueError("controller_connect_retry_delay_s must be non-negative")
+        if self.camera_frame_max_age_ms <= 0:
+            raise ValueError("camera_frame_max_age_ms must be positive")
+        if self.camera_reconnect_attempts < 0:
+            raise ValueError("camera_reconnect_attempts must be non-negative")
+        if self.camera_reconnect_delay_s < 0:
+            raise ValueError("camera_reconnect_delay_s must be non-negative")
         if self.fold_staging_goal_time_s <= 0:
             raise ValueError("fold_staging_goal_time_s must be positive")
         if len(self.folded_positions) != len(self.joint_names):

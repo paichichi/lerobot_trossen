@@ -18,6 +18,14 @@ from lerobot_robot_trossen.stable_postprocess import (
 
 logger = logging.getLogger(__name__)
 
+CAMERA_RECOVERABLE_ERRORS = (
+    TimeoutError,
+    RuntimeError,
+    OSError,
+    DeviceAlreadyConnectedError,
+    DeviceNotConnectedError,
+)
+
 
 class WidowXAIFollower(Robot):
     """
@@ -281,17 +289,88 @@ class WidowXAIFollower(Robot):
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()
-                obs_dict[cam_key] = cam.read_latest()
+                obs_dict[cam_key] = self._read_camera_with_recovery(
+                    cam_key,
+                    cam,
+                    depth=False,
+                )
                 dt_ms = (time.perf_counter() - start) * 1e3
                 logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
             if getattr(cam, "use_depth", False):
                 start = time.perf_counter()
-                obs_dict[f"{cam_key}_depth"] = cam.read_latest_depth()
+                obs_dict[f"{cam_key}_depth"] = self._read_camera_with_recovery(
+                    cam_key,
+                    cam,
+                    depth=True,
+                )
                 dt_ms = (time.perf_counter() - start) * 1e3
                 logger.debug(f"{self} read {cam_key} depth: {dt_ms:.1f}ms")
 
         return obs_dict
+
+    def _read_camera_with_recovery(
+        self,
+        cam_key: str,
+        cam: Any,
+        *,
+        depth: bool,
+    ) -> Any:
+        """Read a fresh frame, restarting only a failed camera when necessary.
+
+        No stale or synthetic image is sent to the policy. While this method is
+        reconnecting, no new arm action is issued, so the controller holds the
+        previously commanded target. If recovery is exhausted, the exception
+        propagates and the normal rollout teardown safely folds the arm.
+        """
+
+        stream_name = "depth" if depth else "RGB"
+
+        def read_frame() -> Any:
+            reader = cam.read_latest_depth if depth else cam.read_latest
+            return reader(max_age_ms=self.config.camera_frame_max_age_ms)
+
+        try:
+            return read_frame()
+        except CAMERA_RECOVERABLE_ERRORS as error:
+            last_error: Exception = error
+            logger.warning(
+                "%s camera %s stream failed; holding the last arm target and "
+                "restarting only this camera: %s",
+                cam_key,
+                stream_name,
+                error,
+            )
+
+        for attempt in range(1, self.config.camera_reconnect_attempts + 1):
+            with suppress(Exception):
+                cam.disconnect()
+            if self.config.camera_reconnect_delay_s:
+                time.sleep(self.config.camera_reconnect_delay_s)
+            try:
+                cam.connect()
+                frame = read_frame()
+                logger.info(
+                    "%s camera recovered on attempt %d/%d",
+                    cam_key,
+                    attempt,
+                    self.config.camera_reconnect_attempts,
+                )
+                return frame
+            except CAMERA_RECOVERABLE_ERRORS as error:
+                last_error = error
+                logger.warning(
+                    "%s camera reconnect attempt %d/%d failed: %s",
+                    cam_key,
+                    attempt,
+                    self.config.camera_reconnect_attempts,
+                    error,
+                )
+
+        raise RuntimeError(
+            f"{cam_key} camera {stream_name} stream could not recover after "
+            f"{self.config.camera_reconnect_attempts} attempt(s)"
+        ) from last_error
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Command arm to move to a target joint configuration.
