@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature
@@ -17,6 +18,7 @@ from lerobot_policy_backbone_act.modeling_backbone_act import (
 )
 from torch import nn
 
+from scripts.eval_act_image_swap import dispersion
 from scripts.make_act_episode_order import shuffled_episode_order
 from scripts.select_best_act_checkpoint import find_best_checkpoint
 
@@ -140,6 +142,15 @@ def test_act_rn50_full_augmentation_is_photometric_only() -> None:
         "sharpness",
     }
     assert all(transform["type"] != "RandomAffine" for transform in transforms.values())
+
+
+def test_image_swap_dispersion_detects_output_collapse() -> None:
+    collapsed = np.zeros((4, 10, 7), dtype=np.float32)
+    responsive = collapsed.copy()
+    responsive[:, :, 0] = np.arange(4, dtype=np.float32)[:, None]
+
+    assert dispersion(collapsed)["rms_about_mean"] == 0.0
+    assert dispersion(responsive)["rms_about_mean"] > 0.0
 
 
 def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:
