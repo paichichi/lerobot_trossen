@@ -31,6 +31,11 @@ class ACTRN50FullConfig(ACTConfig):
     optimizer_lr_backbone: float = 1e-6
     optimizer_weight_decay: float = 1e-4
     scheduler_warmup_steps: int = 1000
+    # `legacy` preserves checkpoints trained before the visual-collapse audit.
+    # New training uses an explicit scale-compatible visual token adapter.
+    visual_adapter_version: str = "legacy"
+    visual_adapter_rms_eps: float = 1e-6
+    visual_token_gain_init: float = 1.0
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -71,6 +76,14 @@ class ACTRN50FullConfig(ACTConfig):
             raise ValueError("Backbone image std values must be positive")
         if self.scheduler_warmup_steps < 0:
             raise ValueError("scheduler_warmup_steps must be non-negative")
+        if self.visual_adapter_version not in {"legacy", "rms_ln_v1"}:
+            raise ValueError(
+                "visual_adapter_version must be 'legacy' or 'rms_ln_v1'"
+            )
+        if self.visual_adapter_rms_eps <= 0:
+            raise ValueError("visual_adapter_rms_eps must be positive")
+        if self.visual_token_gain_init <= 0:
+            raise ValueError("visual_token_gain_init must be positive")
 
     def get_scheduler_preset(self) -> CosineAnnealingWithWarmupSchedulerConfig:
         return CosineAnnealingWithWarmupSchedulerConfig(

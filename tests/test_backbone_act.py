@@ -16,6 +16,9 @@ from lerobot_policy_backbone_act.modeling_backbone_act import (
     _BackboneSpatialEncoder,
     _load_upstream_backbone,
 )
+from lerobot_policy_backbone_act.modeling_native_rn50_act import (
+    _ScaleCompatibleVisualTokenAdapter,
+)
 from torch import nn
 
 from scripts.eval_act_image_swap import dispersion
@@ -93,6 +96,40 @@ def test_native_rn50_is_locked_to_full_official_act() -> None:
     assert config.n_decoder_layers == 1
     assert config.n_vae_encoder_layers == 4
     assert config.normalization_mapping["VISUAL"] == NormalizationMode.IDENTITY
+    assert config.visual_adapter_version == "legacy"
+
+
+def test_scale_compatible_visual_adapter_normalizes_token_scale() -> None:
+    torch.manual_seed(0)
+    adapter = _ScaleCompatibleVisualTokenAdapter(
+        2048, 512, rms_eps=1e-6, gain_init=1.0
+    )
+    feature_map = torch.randn(2, 2048, 3, 4) * 0.006
+
+    tokens = adapter(feature_map)
+    token_rms = tokens.float().square().mean(dim=1).sqrt()
+
+    assert tokens.shape == (2, 512, 3, 4)
+    torch.testing.assert_close(token_rms, torch.ones_like(token_rms), atol=2e-4, rtol=2e-4)
+    assert torch.isfinite(tokens).all()
+
+
+def test_scale_compatible_visual_adapter_is_stable_to_backbone_scale() -> None:
+    torch.manual_seed(0)
+    adapter = _ScaleCompatibleVisualTokenAdapter(
+        2048, 512, rms_eps=1e-12, gain_init=1.0
+    ).eval()
+    feature_map = torch.randn(2, 2048, 3, 4)
+
+    small = adapter(feature_map * 0.006)
+    large = adapter(feature_map * 0.6)
+
+    torch.testing.assert_close(small, large, atol=2e-5, rtol=2e-5)
+
+
+def test_native_rn50_rejects_unknown_visual_adapter() -> None:
+    with pytest.raises(ValueError, match="visual_adapter_version"):
+        ACTRN50FullConfig(visual_adapter_version="unknown")
 
 
 @pytest.mark.parametrize(

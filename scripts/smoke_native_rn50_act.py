@@ -45,6 +45,7 @@ def main() -> None:
         backbone_source_root=str(args.backbone_source_root),
         chunk_size=40,
         n_action_steps=10,
+        visual_adapter_version="rms_ln_v1",
     )
     policy = ACTRN50FullPolicy(config).cuda().train()
     batch = {
@@ -70,6 +71,14 @@ def main() -> None:
     }
 
     torch.cuda.reset_peak_memory_stats()
+    with torch.no_grad():
+        feature_map = policy.model.backbone(
+            batch["observation.images.cam_main"]
+        )["feature_map"]
+        visual_tokens = policy.model.encoder_img_feat_input_proj(feature_map)
+        state_token = policy.model.encoder_robot_state_input_proj(
+            batch["observation.state"]
+        )
     with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
         loss, loss_dict = policy(batch)
     loss.backward()
@@ -99,6 +108,12 @@ def main() -> None:
             gradient is not None and torch.isfinite(gradient).all()
             for gradient in backbone_gradients
         ),
+        "raw_backbone_rms": float(feature_map.float().square().mean().sqrt()),
+        "visual_token_rms": float(visual_tokens.float().square().mean().sqrt()),
+        "visual_token_mean_l2": float(
+            visual_tokens.permute(0, 2, 3, 1).float().norm(dim=-1).mean()
+        ),
+        "state_token_mean_l2": float(state_token.float().norm(dim=-1).mean()),
         "peak_cuda_gib": torch.cuda.max_memory_allocated() / 1024**3,
     }
     print(json.dumps(report, indent=2))

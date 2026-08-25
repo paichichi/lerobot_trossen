@@ -14,7 +14,7 @@ batch_size="${ACT_BATCH_SIZE:-16}"
 eval_steps="${ACT_EVAL_STEPS:-1000}"
 save_freq="${ACT_SAVE_FREQ:-1000}"
 eval_split="${ACT_EVAL_SPLIT:-0.2}"
-output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_carrot_100_train80_val20_10k}"
+output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_rms_ln_v1_carrot_100_train80_val20_10k}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
 
 if [[ ! -d "$dataset_root/meta" || ! -d "$dataset_root/videos" ]]; then
@@ -65,7 +65,7 @@ set -o pipefail
   --dataset.image_transforms.tfs="$image_transforms" \
   --policy.discover_packages_path=lerobot_policy_backbone_act \
   --policy.type=act_rn50_full \
-  --policy.repo_id=Chipaipai/act-rn50-full-carrot-100 \
+  --policy.repo_id=Chipaipai/act-rn50-full-rms-ln-v1-carrot-100 \
   --policy.push_to_hub=false \
   --policy.device=cuda \
   --policy.backbone_checkpoint="$backbone_checkpoint" \
@@ -88,6 +88,9 @@ set -o pipefail
   --policy.optimizer_lr_backbone=1e-6 \
   --policy.optimizer_weight_decay=1e-4 \
   --policy.scheduler_warmup_steps=1000 \
+  --policy.visual_adapter_version=rms_ln_v1 \
+  --policy.visual_adapter_rms_eps=1e-6 \
+  --policy.visual_token_gain_init=1.0 \
   --batch_size="$batch_size" \
   --num_workers=8 \
   --prefetch_factor=4 \
@@ -96,7 +99,7 @@ set -o pipefail
   --save_freq="$save_freq" \
   --log_freq=100 \
   --output_dir="$output_dir" \
-  --job_name=act_rn50_full_carrot_100_train80_val20_10k \
+  --job_name=act_rn50_full_rms_ln_v1_carrot_100_train80_val20_10k \
   --wandb.enable=false \
   2>&1 | tee "$train_log"
 
