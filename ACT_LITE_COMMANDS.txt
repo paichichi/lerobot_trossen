@@ -1,6 +1,7 @@
 # Run from ~/lerobot_trossen. Ctrl+C once, then wait for "Rollout finished".
 
-# Train ACT-RN50-full: native 480x640, dual-camera, end-to-end RN50.
+# Train ACT-RN50-full: 60 train demos, 40 validation demos,
+# native 480x640, dual-camera, end-to-end RN50.
 # bash scripts/train_act_rn50_full.sh
 
 # Update the ACT-RN50-full branch.

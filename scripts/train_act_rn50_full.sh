@@ -13,7 +13,8 @@ steps="${ACT_STEPS:-50000}"
 batch_size="${ACT_BATCH_SIZE:-16}"
 eval_steps="${ACT_EVAL_STEPS:-2000}"
 save_freq="${ACT_SAVE_FREQ:-2000}"
-output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_carrot_100_50k}"
+eval_split="${ACT_EVAL_SPLIT:-0.4}"
+output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_carrot_100_train60_val40}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
 
 if [[ ! -d "$dataset_root/meta" || ! -d "$dataset_root/videos" ]]; then
@@ -36,6 +37,7 @@ fi
 episode_order="$(.venv/bin/python scripts/make_act_episode_order.py \
   --repo-id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
   --root="$dataset_root" \
+  --eval-split="$eval_split" \
   --seed=1000 | tail -n 1)"
 image_transforms="$(<"$repo_root/configs/act_rn50_full_image_transforms.json")"
 
@@ -54,7 +56,7 @@ set -o pipefail
   --dataset.repo_id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
   --dataset.root="$dataset_root" \
   --dataset.episodes="$episode_order" \
-  --dataset.eval_split=0.2 \
+  --dataset.eval_split="$eval_split" \
   --dataset.return_uint8=true \
   --dataset.video_backend=torchcodec \
   --dataset.image_transforms.enable=true \
@@ -94,7 +96,7 @@ set -o pipefail
   --save_freq="$save_freq" \
   --log_freq=100 \
   --output_dir="$output_dir" \
-  --job_name=act_rn50_full_carrot_100 \
+  --job_name=act_rn50_full_carrot_100_train60_val40 \
   --wandb.enable=false \
   2>&1 | tee "$train_log"
 

@@ -33,6 +33,7 @@ dataset_root="/home/paichichi/data/act-lite-review/carrot_100_v3"
 episode_order="$("$repo_root/.venv/bin/python" scripts/make_act_episode_order.py \
   --repo-id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
   --root="$dataset_root" \
+  --eval-split=0.2 \
   --seed=1000 | tail -n 1)"
 output_dir="$repo_root/outputs/train/act_official_rn18_carrot_100_50k"
 train_log="$repo_root/outputs/train/act_official_rn18_carrot_100_50k.train.log"
