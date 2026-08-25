@@ -43,6 +43,7 @@ export BACKBONE_SOURCE_ROOT="$backbone_source_root"
 export BACKBONE_CHECKPOINT="$backbone_checkpoint"
 export ACCELERATE_MIXED_PRECISION=bf16
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTHONPATH="$repo_root/packages/lerobot_policy_backbone_act/src${PYTHONPATH:+:$PYTHONPATH}"
 if [[ -d "$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu" ]]; then
   export LD_LIBRARY_PATH="$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
