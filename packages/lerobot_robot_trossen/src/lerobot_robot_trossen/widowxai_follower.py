@@ -3,12 +3,14 @@ import time
 from typing import Any
 
 import trossen_arm
-from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.robots.robot import Robot
 from lerobot.robots.utils import ensure_safe_goal_position
+from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from lerobot_robot_trossen.config_widowxai_follower import WidowXAIFollowerConfig
+from lerobot_robot_trossen.recovering_realsense import (
+    make_trossen_cameras_from_configs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ class WidowXAIFollower(Robot):
         self.config = config
 
         self.driver = trossen_arm.TrossenArmDriver()
-        self.cameras = make_cameras_from_configs(config.cameras)
+        self.cameras = make_trossen_cameras_from_configs(config.cameras)
         self.min_time_to_move = (
             config.min_time_to_move_multiplier / self.config.loop_rate
         )
