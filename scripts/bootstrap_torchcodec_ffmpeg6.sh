@@ -6,6 +6,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 install_root="${ACT_FFMPEG_ROOT:-$repo_root/.local/ffmpeg6}"
 lib_dir="$install_root/usr/lib/x86_64-linux-gnu"
+libavdevice_version="${ACT_LIBAVDEVICE_VERSION:-7:6.1.1-3ubuntu5}"
 
 if LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   "$repo_root/.venv/bin/python" -c "import torchcodec" >/dev/null 2>&1; then
@@ -19,7 +20,7 @@ mkdir -p "$install_root"
 cd "$download_dir"
 
 apt download \
-  libavdevice60 \
+  "libavdevice60=$libavdevice_version" \
   libjack-jackd2-0 \
   libopenal1 \
   libdc1394-25 \

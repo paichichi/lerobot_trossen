@@ -37,8 +37,9 @@ episode_order="$(.venv/bin/python scripts/make_act_episode_order.py \
 export BACKBONE_SOURCE_ROOT="$backbone_source_root"
 export BACKBONE_CHECKPOINT="$backbone_checkpoint"
 export ACCELERATE_MIXED_PRECISION=bf16
-if [[ -d "$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu" ]]; then
-  export LD_LIBRARY_PATH="$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ffmpeg_lib_dir="${ACT_FFMPEG_LIB_DIR:-$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu}"
+if [[ -d "$ffmpeg_lib_dir" ]]; then
+  export LD_LIBRARY_PATH="$ffmpeg_lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
 mkdir -p "$(dirname "$output_dir")"
