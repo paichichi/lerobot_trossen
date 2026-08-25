@@ -7,7 +7,7 @@ from lerobot.optim import AdamWConfig
 @PreTrainedConfig.register_subclass("v11")
 @dataclass
 class V11Config(PreTrainedConfig):
-    """Inference-only contract for a V11 frozen-backbone chunked MLP."""
+    """Inference contract for V11; exported backbone weights are runtime-frozen."""
 
     backbone_checkpoint: str = ""
     backbone_source_root: str = ""
@@ -42,7 +42,7 @@ class V11Config(PreTrainedConfig):
         if self.backbone_family != "ours_rn50":
             raise ValueError("The V11 official-runtime adapter supports ours_rn50 only")
         if not self.freeze_vision_backbone:
-            raise ValueError("V11 was trained with a frozen vision backbone")
+            raise ValueError("V11 inference requires frozen exported backbone weights")
         if self.feature_dim <= 0 or self.action_dim != 7:
             raise ValueError("V11 requires positive RN50 features and seven actions")
         if not self.hidden_dimensions or any(x <= 0 for x in self.hidden_dimensions):

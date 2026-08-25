@@ -1,8 +1,13 @@
 from pathlib import Path
 
+import pytest
 import torch
 from lerobot_policy_v11 import modeling_v11
 from lerobot_policy_v11.configuration_v11 import V11Config
+from lerobot_policy_v11.export_v11 import (
+    EXPECTED_POLICY_CONTRACT,
+    validate_policy_contract,
+)
 from lerobot_policy_v11.processor_v11 import make_v11_pre_post_processors
 from torch import nn
 
@@ -59,3 +64,29 @@ def test_v11_processors_leave_checkpoint_normalization_in_policy() -> None:
     preprocessor, postprocessor = make_v11_pre_post_processors(config)
     assert len(preprocessor.steps) == 3
     assert len(postprocessor.steps) == 1
+
+
+@pytest.mark.parametrize(
+    "implementation",
+    [
+        "tcc_mlp_bc_v11_basic_chunked_absolute",
+        "tcc_mlp_bc_v11_end_to_end_chunked_absolute",
+    ],
+)
+def test_v11_export_accepts_frozen_and_end_to_end_training_contracts(
+    implementation: str,
+) -> None:
+    policy_cfg = {**EXPECTED_POLICY_CONTRACT, "implementation": implementation}
+
+    validate_policy_contract(policy_cfg)
+
+
+def test_v11_export_still_rejects_incompatible_action_contract() -> None:
+    policy_cfg = {
+        **EXPECTED_POLICY_CONTRACT,
+        "implementation": "tcc_mlp_bc_v11_end_to_end_chunked_absolute",
+        "action_representation": "residual",
+    }
+
+    with pytest.raises(RuntimeError, match="action_representation"):
+        validate_policy_contract(policy_cfg)

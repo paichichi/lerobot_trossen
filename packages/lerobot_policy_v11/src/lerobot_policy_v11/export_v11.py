@@ -12,6 +12,36 @@ from .configuration_v11 import V11Config
 from .modeling_v11 import V11Policy
 from .processor_v11 import make_v11_pre_post_processors
 
+SUPPORTED_IMPLEMENTATIONS = {
+    "tcc_mlp_bc_v11_basic_chunked_absolute",
+    "tcc_mlp_bc_v11_end_to_end_chunked_absolute",
+}
+EXPECTED_POLICY_CONTRACT = {
+    "architecture": "pooled_feature_mlp",
+    "cameras": ["cam_main"],
+    "proprioception": True,
+    "action_representation": "absolute",
+    "action_space": "joint_position",
+    "action_chunk_size": 40,
+    "action_steps_per_inference": 10,
+}
+
+
+def validate_policy_contract(policy_cfg: dict) -> None:
+    implementation = policy_cfg.get("implementation")
+    mismatches = {
+        key: (expected_value, policy_cfg.get(key))
+        for key, expected_value in EXPECTED_POLICY_CONTRACT.items()
+        if policy_cfg.get(key) != expected_value
+    }
+    if implementation not in SUPPORTED_IMPLEMENTATIONS:
+        mismatches["implementation"] = (
+            sorted(SUPPORTED_IMPLEMENTATIONS),
+            implementation,
+        )
+    if mismatches:
+        raise RuntimeError(f"Checkpoint is not the supported V11 contract: {mismatches}")
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -31,23 +61,7 @@ def export_checkpoint(args: argparse.Namespace) -> None:
     if not isinstance(checkpoint, dict) or not isinstance(checkpoint.get("config"), dict):
         raise TypeError("Expected a V11 training checkpoint dictionary")
     policy_cfg = checkpoint["config"].get("policy", {})
-    expected = {
-        "implementation": "tcc_mlp_bc_v11_basic_chunked_absolute",
-        "architecture": "pooled_feature_mlp",
-        "cameras": ["cam_main"],
-        "proprioception": True,
-        "action_representation": "absolute",
-        "action_space": "joint_position",
-        "action_chunk_size": 40,
-        "action_steps_per_inference": 10,
-    }
-    mismatches = {
-        key: (expected_value, policy_cfg.get(key))
-        for key, expected_value in expected.items()
-        if policy_cfg.get(key) != expected_value
-    }
-    if mismatches:
-        raise RuntimeError(f"Checkpoint is not the supported V11 contract: {mismatches}")
+    validate_policy_contract(policy_cfg)
     config = V11Config(
         device=args.device,
         backbone_checkpoint=str(args.backbone_checkpoint.resolve()),
