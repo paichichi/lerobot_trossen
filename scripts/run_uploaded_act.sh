@@ -121,6 +121,13 @@ rollout_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
+if [[ "$model" == rn50_full ]]; then
+  rollout_command+=(
+    --robot.arm_max_velocity_rad_s=0.5
+    --robot.arm_max_acceleration_rad_s2=3.0
+    --robot.postprocess_max_dt_multiplier=2.0
+  )
+fi
 printf '%q ' "${rollout_command[@]}" > "$run_dir/resolved_command.txt"
 printf '\n' >> "$run_dir/resolved_command.txt"
 "${rollout_command[@]}"

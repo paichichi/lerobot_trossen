@@ -34,11 +34,6 @@ REMOVED_CUSTOM_DRIVER_ARGUMENTS = (
     "camera_reconnect_",
     "fold_on_disconnect",
     "folded_positions",
-    "arm_max_velocity_",
-    "arm_max_acceleration_",
-    "gripper_max_velocity_",
-    "gripper_deadband_",
-    "postprocess_",
     "hardware_rollout_",
 )
 
@@ -59,6 +54,18 @@ def test_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
     assert "ours_rn50)" in script
     assert "rn18)" in script
     assert script.count("rollout_command=(") == 1
+
+
+def test_rn50_full_alone_enables_arm_only_postprocessing() -> None:
+    act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    v11_script = (REPO_ROOT / "scripts/run_uploaded_v11.sh").read_text()
+
+    assert 'if [[ "$model" == rn50_full ]]' in act_script
+    assert "--robot.arm_max_velocity_rad_s=0.5" in act_script
+    assert "--robot.arm_max_acceleration_rad_s2=3.0" in act_script
+    assert "--robot.postprocess_max_dt_multiplier=2.0" in act_script
+    assert "gripper_max_velocity" not in act_script
+    assert "arm_max_velocity" not in v11_script
 
 
 def test_launchers_pin_end_to_end_rn50_checkpoints() -> None:

@@ -23,6 +23,12 @@ class WidowXAIFollowerConfig(RobotConfig):
     # A recommended starting value is 3.0.
     min_time_to_move_multiplier: float = 3.0
 
+    # Optional postprocessing for absolute arm joint targets. Both limits must
+    # be set to enable it. The gripper target is deliberately left untouched.
+    arm_max_velocity_rad_s: float | None = None
+    arm_max_acceleration_rad_s2: float | None = None
+    postprocess_max_dt_multiplier: float = 2.0
+
     # Control loop rate in Hz
     loop_rate: int = 30
 
@@ -66,3 +72,13 @@ class WidowXAIFollowerConfig(RobotConfig):
     staged_positions: list[float] = field(
         default_factory=lambda: [0, np.pi / 3, np.pi / 6, np.pi / 5, 0, 0, 0]
     )
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        limits = (self.arm_max_velocity_rad_s, self.arm_max_acceleration_rad_s2)
+        if (limits[0] is None) != (limits[1] is None):
+            raise ValueError("Both arm postprocess limits must be configured together")
+        if any(value is not None and value <= 0 for value in limits):
+            raise ValueError("Arm postprocess limits must be positive")
+        if self.postprocess_max_dt_multiplier < 1.0:
+            raise ValueError("postprocess_max_dt_multiplier must be at least one")
