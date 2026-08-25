@@ -5,6 +5,7 @@ model="${1:-ours_rn50}"
 mode="${2:-download}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+max_relative_target=0.07
 
 case "$model" in
   ours_rn50)
@@ -16,6 +17,9 @@ case "$model" in
     policy_repo=Chipaipai/act-rn50-full-carrot-100
     policy_revision=f599bba7e80f22a513f98a8579dae6cbf44ca627
     policy_dir_name=act_rn50_full_6k
+    # Stateless spike limiting only: preserve the ACT target sequence and
+    # avoid the lag introduced by velocity/acceleration filters.
+    max_relative_target=0.06
     ;;
   rn18)
     policy_repo=Chipaipai/act-official-rn18-carrot-100
@@ -112,7 +116,7 @@ rollout_command=(
   --robot.id=follower
   --robot.loop_rate=20
   --robot.min_time_to_move_multiplier=2.0
-  --robot.max_relative_target=0.07
+  --robot.max_relative_target="$max_relative_target"
   --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
   --strategy.type=base
   --fps=20
@@ -121,13 +125,6 @@ rollout_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
-if [[ "$model" == rn50_full ]]; then
-  rollout_command+=(
-    --robot.arm_max_velocity_rad_s=0.5
-    --robot.arm_max_acceleration_rad_s2=3.0
-    --robot.postprocess_max_dt_multiplier=2.0
-  )
-fi
 printf '%q ' "${rollout_command[@]}" > "$run_dir/resolved_command.txt"
 printf '\n' >> "$run_dir/resolved_command.txt"
 "${rollout_command[@]}"

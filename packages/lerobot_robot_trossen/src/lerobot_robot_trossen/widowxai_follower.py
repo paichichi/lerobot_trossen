@@ -7,7 +7,6 @@ from lerobot.robots.robot import Robot
 from lerobot.robots.utils import ensure_safe_goal_position
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
-from lerobot_robot_trossen.arm_postprocess import TimeAwareArmTargetFilter
 from lerobot_robot_trossen.config_widowxai_follower import WidowXAIFollowerConfig
 from lerobot_robot_trossen.recovering_realsense import (
     make_trossen_cameras_from_configs,
@@ -33,16 +32,6 @@ class WidowXAIFollower(Robot):
         self.min_time_to_move = (
             config.min_time_to_move_multiplier / self.config.loop_rate
         )
-        self.arm_target_filter = None
-        if config.arm_max_velocity_rad_s is not None:
-            assert config.arm_max_acceleration_rad_s2 is not None
-            self.arm_target_filter = TimeAwareArmTargetFilter(
-                arm_joint_names=tuple(config.joint_names[:-1]),
-                nominal_dt=1.0 / config.loop_rate,
-                max_dt_multiplier=config.postprocess_max_dt_multiplier,
-                max_velocity_rad_s=config.arm_max_velocity_rad_s,
-                max_acceleration_rad_s2=config.arm_max_acceleration_rad_s2,
-            )
 
     @property
     def _joint_ft(self) -> dict[str, type]:
@@ -130,14 +119,6 @@ class WidowXAIFollower(Robot):
             goal_time=2.0,
             blocking=True,
         )
-        if self.arm_target_filter is not None:
-            self.arm_target_filter.reset()
-            logger.info(
-                "Arm target postprocess enabled: %.3f rad/s, %.3f rad/s^2; "
-                "gripper unchanged",
-                self.config.arm_max_velocity_rad_s,
-                self.config.arm_max_acceleration_rad_s2,
-            )
 
     def get_observation(self) -> dict[str, Any]:
         if not self.is_connected:
@@ -234,9 +215,9 @@ class WidowXAIFollower(Robot):
             if key.endswith(".pos")
         }
 
-        # Read present position once for optional smoothing and the final
-        # official relative-target safety cap.
-        if self.arm_target_filter is not None or self.config.max_relative_target is not None:
+        # Cap goal position when too far away from present position.
+        # /!\ Slower fps expected due to reading from the follower.
+        if self.config.max_relative_target is not None:
             present_pos = dict(
                 zip(
                     self.config.joint_names,
@@ -244,16 +225,6 @@ class WidowXAIFollower(Robot):
                     strict=True,
                 )
             )
-        if self.arm_target_filter is not None:
-            goal_pos = self.arm_target_filter.apply(
-                goal_pos,
-                present_pos,
-                now=time.perf_counter(),
-            )
-
-        # Cap any remaining large relative target as the final safety layer.
-        # /!\ Slower fps expected due to reading from the follower.
-        if self.config.max_relative_target is not None:
             goal_present_pos = {
                 key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()
             }
