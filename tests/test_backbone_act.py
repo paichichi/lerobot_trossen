@@ -180,10 +180,10 @@ def test_deployment_environment_overrides_serialized_training_paths(
 def test_act_split_is_seeded_random_and_stratified_per_task() -> None:
     tasks = [["carrot"]] * 100 + [["apple"]] * 100
 
-    order, counts = shuffled_episode_order(tasks, seed=1000, eval_split=0.4)
+    order, counts = shuffled_episode_order(tasks, seed=1000, eval_split=0.2)
 
-    assert counts == {"carrot": (60, 40), "apple": (60, 40)}
-    assert order == shuffled_episode_order(tasks, seed=1000, eval_split=0.4)[0]
+    assert counts == {"carrot": (80, 20), "apple": (80, 20)}
+    assert order == shuffled_episode_order(tasks, seed=1000, eval_split=0.2)[0]
     assert order[:100] != list(range(100))
     assert order[100:] != list(range(100, 200))
 

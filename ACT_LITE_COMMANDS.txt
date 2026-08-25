@@ -1,6 +1,6 @@
 # Run from ~/lerobot_trossen. Ctrl+C once, then wait for "Rollout finished".
 
-# Train ACT-RN50-full: 60 train demos, 40 validation demos,
+# Train ACT-RN50-full for 10k steps: random 80 train / 20 validation,
 # native 480x640, dual-camera, end-to-end RN50.
 # bash scripts/train_act_rn50_full.sh
 

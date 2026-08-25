@@ -9,12 +9,12 @@ cd "$repo_root"
 dataset_root="${ACT_DATASET_ROOT:-/home/paichichi/data/act-lite-review/carrot_100_v3}"
 backbone_source_root="${BACKBONE_SOURCE_ROOT:-/home/paichichi/projects/TCC-core}"
 backbone_checkpoint="${BACKBONE_CHECKPOINT:-$repo_root/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt}"
-steps="${ACT_STEPS:-50000}"
+steps="${ACT_STEPS:-10000}"
 batch_size="${ACT_BATCH_SIZE:-16}"
-eval_steps="${ACT_EVAL_STEPS:-2000}"
-save_freq="${ACT_SAVE_FREQ:-2000}"
-eval_split="${ACT_EVAL_SPLIT:-0.4}"
-output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_carrot_100_train60_val40}"
+eval_steps="${ACT_EVAL_STEPS:-1000}"
+save_freq="${ACT_SAVE_FREQ:-1000}"
+eval_split="${ACT_EVAL_SPLIT:-0.2}"
+output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_carrot_100_train80_val20_10k}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
 
 if [[ ! -d "$dataset_root/meta" || ! -d "$dataset_root/videos" ]]; then
@@ -96,7 +96,7 @@ set -o pipefail
   --save_freq="$save_freq" \
   --log_freq=100 \
   --output_dir="$output_dir" \
-  --job_name=act_rn50_full_carrot_100_train60_val40 \
+  --job_name=act_rn50_full_carrot_100_train80_val20_10k \
   --wandb.enable=false \
   2>&1 | tee "$train_log"
 
