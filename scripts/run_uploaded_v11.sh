@@ -10,27 +10,10 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-if [[ -n "${TCC_REAL_ROBOT_SOURCE_ROOT:-}" ]]; then
-  tcc_real_robot_root="$TCC_REAL_ROBOT_SOURCE_ROOT"
-elif [[ -d "$repo_root/../tcc-core-real-robot" ]]; then
-  tcc_real_robot_root="$(cd "$repo_root/../tcc-core-real-robot" && pwd)"
-else
-  tcc_real_robot_root="${HOME}/projects/tcc-core-real-robot"
-fi
-
-if [[ -n "${BACKBONE_SOURCE_ROOT:-}" ]]; then
-  backbone_source_root="$BACKBONE_SOURCE_ROOT"
-elif [[ -d "$repo_root/../TCC-core" ]]; then
-  backbone_source_root="$(cd "$repo_root/../TCC-core" && pwd)"
-else
-  backbone_source_root="${HOME}/projects/TCC-core"
-fi
 policy_revision=56690ddea1023ebe840c2d0dd1a07cfad67377b0
 policy_file=policies_v11_end_to_end_rn50/ours_rn50/checkpoint_100000.pt
-backbone_file=backbones/ours_rn50/checkpoint_040000.pt
 asset_root="$repo_root/assets/tcc-policy-assets"
 raw_policy="$asset_root/$policy_file"
-backbone_checkpoint="$asset_root/$backbone_file"
 policy_path="$repo_root/checkpoints/v11_end_to_end_ours_rn50"
 
 text_log="$repo_root/output/v11_latest.txt"
@@ -86,32 +69,16 @@ if [[ "$(uname -s)" == Linux ]] && ! command -v cc >/dev/null 2>&1; then
 fi
 "$uv_bin" sync --locked --extra act
 
-echo "[2/5] Downloading the pinned V11 policy and backbone"
+echo "[2/5] Downloading the pinned self-contained V11 policy"
 "$uv_bin" run --no-sync hf download Chipaipai/tcc-core-real-robot-policies \
-  "$policy_file" "$backbone_file" \
+  "$policy_file" \
   --revision "$policy_revision" \
   --local-dir "$asset_root"
-
-export TCC_REAL_ROBOT_SOURCE_ROOT="$tcc_real_robot_root"
-export BACKBONE_SOURCE_ROOT="$backbone_source_root"
-export BACKBONE_CHECKPOINT="$backbone_checkpoint"
-
-if [[ ! -f "$tcc_real_robot_root/src/tcc_real_robot/policy.py" ]]; then
-  echo "TCC real-robot source missing: $tcc_real_robot_root" >&2
-  exit 1
-fi
-if [[ ! -f "$backbone_source_root/xirl/models.py" ]]; then
-  echo "TCC backbone source missing: $backbone_source_root" >&2
-  exit 1
-fi
 
 echo "[3/5] Converting V11 to the LeRobot policy contract"
 "$uv_bin" run --no-sync python -m lerobot_policy_v11.export_v11 \
   --checkpoint "$raw_policy" \
-  --output-dir "$policy_path" \
-  --backbone-checkpoint "$backbone_checkpoint" \
-  --backbone-source-root "$backbone_source_root" \
-  --tcc-real-robot-source-root "$tcc_real_robot_root"
+  --output-dir "$policy_path"
 
 if [[ "$mode" != --execute ]]; then
   echo "[4/5] Export self-check passed"

@@ -19,9 +19,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--backbone-checkpoint", type=Path, required=True)
-    parser.add_argument("--backbone-source-root", type=Path, required=True)
-    parser.add_argument("--tcc-real-robot-source-root", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
     return parser.parse_args()
 
@@ -31,8 +28,16 @@ def export_checkpoint(args: argparse.Namespace) -> None:
     if not isinstance(checkpoint, dict) or not isinstance(checkpoint.get("config"), dict):
         raise TypeError("Expected a V11 training checkpoint dictionary")
     policy_cfg = checkpoint["config"].get("policy", {})
+    supported_implementations = {
+        "tcc_mlp_bc_v11_basic_chunked_absolute",
+        "tcc_mlp_bc_v11_end_to_end_chunked_absolute",
+    }
+    if policy_cfg.get("implementation") not in supported_implementations:
+        raise RuntimeError(
+            "Checkpoint is not a supported V11 implementation: "
+            f"{policy_cfg.get('implementation')!r}"
+        )
     expected = {
-        "implementation": "tcc_mlp_bc_v11_basic_chunked_absolute",
         "architecture": "pooled_feature_mlp",
         "cameras": ["cam_main"],
         "proprioception": True,
@@ -50,9 +55,6 @@ def export_checkpoint(args: argparse.Namespace) -> None:
         raise RuntimeError(f"Checkpoint is not the supported V11 contract: {mismatches}")
     config = V11Config(
         device=args.device,
-        backbone_checkpoint=str(args.backbone_checkpoint.resolve()),
-        backbone_source_root=str(args.backbone_source_root.resolve()),
-        tcc_real_robot_source_root=str(args.tcc_real_robot_source_root.resolve()),
         feature_dim=int(checkpoint["feature_dim"]),
         hidden_dimensions=tuple(policy_cfg["hidden_dimensions"]),
         action_dim=int(policy_cfg["action_dim"]),

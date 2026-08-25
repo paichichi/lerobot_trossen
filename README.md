@@ -60,6 +60,21 @@ original ACT training code, complete episodes are shuffled with a fixed seed,
 80% per task are used for training, 20% for validation, and the saved checkpoint
 with the lowest validation loss is selected for robot evaluation.
 
+### V11 end-to-end MLP
+
+The V11 runtime is integrated into this repository. Its pooled ResNet-50,
+single-view state-conditioned MLP, checkpoint conversion, Trossen driver, and
+LeRobot rollout entry point require no adjacent `tcc-core-real-robot` or
+`TCC-core` source checkout. The uploaded training checkpoint contains both the
+fine-tuned backbone and policy-head weights.
+
+Run a validation-only conversion first, then opt in to physical execution:
+
+```shell
+bash scripts/run_uploaded_v11.sh
+bash scripts/run_uploaded_v11.sh --execute
+```
+
 ### Teleoperation Script
 
 Teleoperate a WidowX AI robot with another WidowX AI robot.

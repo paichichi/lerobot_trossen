@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import torch
 from lerobot_policy_v11 import modeling_v11
 from lerobot_policy_v11.configuration_v11 import V11Config
@@ -14,12 +12,10 @@ class FakeBackbone(nn.Module):
 
 def make_policy(monkeypatch) -> modeling_v11.V11Policy:
     monkeypatch.setattr(
-        modeling_v11, "_load_upstream_backbone", lambda config: FakeBackbone()
+        modeling_v11, "_make_backbone", lambda config: FakeBackbone()
     )
-    tcc_root = Path(__file__).parents[2] / "tcc-core-real-robot"
     config = V11Config(
         device="cpu",
-        tcc_real_robot_source_root=str(tcc_root),
         feature_dim=4,
         hidden_dimensions=(8,),
     )

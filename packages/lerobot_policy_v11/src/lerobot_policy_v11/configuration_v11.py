@@ -7,8 +7,10 @@ from lerobot.optim import AdamWConfig
 @PreTrainedConfig.register_subclass("v11")
 @dataclass
 class V11Config(PreTrainedConfig):
-    """Inference-only contract for a V11 frozen-backbone chunked MLP."""
+    """Inference contract for a self-contained V11 end-to-end checkpoint."""
 
+    # Retained only so older exported configs remain loadable. The integrated
+    # runtime constructs the architecture locally and needs no source checkout.
     backbone_checkpoint: str = ""
     backbone_source_root: str = ""
     tcc_real_robot_source_root: str = ""

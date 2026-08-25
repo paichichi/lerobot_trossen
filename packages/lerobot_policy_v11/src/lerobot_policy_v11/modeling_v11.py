@@ -1,34 +1,22 @@
 from __future__ import annotations
 
-import os
-import sys
 from collections import deque
-from pathlib import Path
 from typing import Any
 
 import torch
 from lerobot.policies.pretrained import PreTrainedPolicy
-from lerobot_policy_backbone_act.modeling_backbone_act import _load_upstream_backbone
 from torch import Tensor, nn
 from torch.nn import functional
 
+from .components_v11 import V11MLPHead, V11ResNet50Backbone
 from .configuration_v11 import V11Config
 
 
-def _load_v11_head_class(config: V11Config) -> type[nn.Module]:
-    source_root = Path(
-        os.environ.get("TCC_REAL_ROBOT_SOURCE_ROOT", config.tcc_real_robot_source_root)
-    ).expanduser().resolve()
-    package_root = source_root / "src"
-    policy_path = package_root / "tcc_real_robot" / "policy.py"
-    if not policy_path.is_file():
-        raise FileNotFoundError(f"TCC real-robot source checkout not found: {policy_path}")
-    source_string = str(package_root)
-    if source_string not in sys.path:
-        sys.path.insert(0, source_string)
-    from tcc_real_robot.policy import TCCMLPPolicy
-
-    return TCCMLPPolicy
+def _make_backbone(config: V11Config) -> nn.Module:
+    backbone = V11ResNet50Backbone()
+    for parameter in backbone.parameters():
+        parameter.requires_grad_(not config.freeze_vision_backbone)
+    return backbone
 
 
 class V11Policy(PreTrainedPolicy):
@@ -40,23 +28,13 @@ class V11Policy(PreTrainedPolicy):
     def __init__(self, config: V11Config, **kwargs: Any) -> None:
         super().__init__(config)
         del kwargs
-        self.backbone = _load_upstream_backbone(config)
-        head_class = _load_v11_head_class(config)
-        self.head = head_class(
+        self.backbone = _make_backbone(config)
+        self.head = V11MLPHead(
             feature_dim=config.feature_dim,
-            num_tasks=config.number_of_tasks,
-            action_dim=config.action_dim * config.action_chunk_size,
-            hidden_dims=config.hidden_dimensions,
-            proprio_dim=config.proprioception_dim,
-            progress_dim=0,
-            input_batch_norm=False,
-            input_layer_norm=False,
-            output_layer_scale=1.0,
-            camera_names=("cam_main",),
-            camera_fusion="raw_concat",
-            camera_projection_dim=0,
-            camera_gate_hidden_dim=0,
-            dropout=0.0,
+            number_of_tasks=config.number_of_tasks,
+            proprioception_dim=config.proprioception_dim,
+            hidden_dimensions=config.hidden_dimensions,
+            output_dim=config.action_dim * config.action_chunk_size,
         )
         flat_action_dim = config.action_dim * config.action_chunk_size
         self.register_buffer("action_mean", torch.zeros(flat_action_dim))
@@ -118,7 +96,7 @@ class V11Policy(PreTrainedPolicy):
             dtype=torch.long,
             device=state.device,
         )
-        normalized_action = self.head(features, None, task, normalized_state, None)
+        normalized_action = self.head(features, task, normalized_state)
         action = normalized_action * self.action_std + self.action_mean
         return action.reshape(
             state.shape[0], self.config.action_chunk_size, self.config.action_dim
