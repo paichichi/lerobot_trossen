@@ -124,9 +124,7 @@ echo "[5/5] Starting hardware rollout"
 "$uv_bin" run --no-sync python -c \
   'import sys, torch; available = torch.cuda.is_available(); print("CUDA device:", torch.cuda.get_device_name(0) if available else "unavailable"); sys.exit(0 if available else 1)'
 echo "Starting official LeRobot rollout for V11. Keep the E-stop ready."
-rollout_parent="$(mktemp -d /tmp/v11_rollout.XXXXXX)"
-rollout_dataset_root="$rollout_parent/dataset"
-record_command=(
+rollout_command=(
   "$uv_bin" run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
   --robot.type=widowxai_follower_robot
@@ -136,19 +134,12 @@ record_command=(
   --robot.min_time_to_move_multiplier=2.0
   --robot.max_relative_target=0.07
   --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
-  --strategy.type=episodic
+  --strategy.type=base
   --device=cuda
   --fps=20
   --task="Pick up the carrot and place it in the pan"
   --return_to_initial_position=true
-  --dataset.repo_id=Chipaipai/rollout_v11-ours-rn50-carrot-eval
-  --dataset.root="$rollout_dataset_root"
-  --dataset.num_episodes=1
-  --dataset.episode_time_s=30
-  --dataset.reset_time_s=10
-  --dataset.single_task="Pick up the carrot and place it in the pan"
-  --dataset.push_to_hub=false
   --display_data=false
   --policy.path="$policy_path"
 )
-"${record_command[@]}"
+"${rollout_command[@]}"

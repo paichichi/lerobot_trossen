@@ -1,5 +1,7 @@
 # Run from the lerobot_trossen repository root.
-# Every run is saved under output/<model>_<UTC timestamp>/.
+# Console logs are saved under output/<model>_<UTC timestamp>/.
+# Physical evaluation uses LeRobot base mode: no rollout dataset or video is recorded.
+# Press Ctrl+C after the task; official teardown returns to the initial position.
 
 # Ours RN50: download and show the safety report (does not move the robot).
 bash scripts/run_uploaded_act.sh ours_rn50

@@ -21,7 +21,7 @@ SHARED_DRIVER_ARGUMENTS = (
     'serial_number_or_name: "838212073584"',
     "cam_wrist: {type: intelrealsense",
     'serial_number_or_name: "409122274608"',
-    "--strategy.type=episodic",
+    "--strategy.type=base",
     "--fps=20",
     "--return_to_initial_position=true",
 )
@@ -57,7 +57,16 @@ def test_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
     assert 'model="${1:-ours_rn50}"' in script
     assert "ours_rn50)" in script
     assert "rn18)" in script
-    assert script.count("record_command=(") == 1
+    assert script.count("rollout_command=(") == 1
+
+
+def test_base_rollouts_do_not_create_evaluation_datasets() -> None:
+    scripts = [path.read_text() for path in EVAL_LAUNCHERS]
+
+    for script in scripts:
+        assert "--strategy.type=base" in script
+        assert "--dataset." not in script
+        assert "rollout_dataset" not in script
 
 
 def test_rn50_only_replaces_the_official_act_visual_input_path() -> None:
