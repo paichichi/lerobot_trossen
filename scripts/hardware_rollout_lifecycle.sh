@@ -7,7 +7,7 @@
 
 HARDWARE_ROLLOUT_PID=""
 HARDWARE_ROLLOUT_PID_FILE=""
-HARDWARE_ROLLOUT_LOCK_FD=""
+HARDWARE_ROLLOUT_LOCK_FD=9
 
 hardware_rollout_pid_is_ours() {
   local pid="$1"
@@ -19,7 +19,32 @@ hardware_rollout_pid_is_ours() {
   process_cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
   process_command="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
   [[ "$process_cwd" == "$repo_root" ]] || return 1
-  [[ "$process_command" == *lerobot-rollout* ]]
+  [[ "$process_command" == *lerobot-rollout* \
+    || "$process_command" == *lerobot_rollout* ]]
+}
+
+hardware_rollout_find_managed_lock_holders() {
+  local repo_root="$1"
+  local lock_file="$2"
+  local fd_path holder_pid process_cwd process_command target
+
+  for fd_path in /proc/[0-9]*/fd/*; do
+    [[ -e "$fd_path" ]] || continue
+    target="$(readlink "$fd_path" 2>/dev/null || true)"
+    [[ "$target" == "$lock_file" ]] || continue
+    holder_pid="${fd_path#/proc/}"
+    holder_pid="${holder_pid%%/*}"
+    [[ "$holder_pid" != "$$" ]] || continue
+    process_cwd="$(readlink -f "/proc/$holder_pid/cwd" 2>/dev/null || true)"
+    process_command="$(tr '\0' ' ' < "/proc/$holder_pid/cmdline" 2>/dev/null || true)"
+    [[ "$process_cwd" == "$repo_root" ]] || continue
+    if [[ "$process_command" == *lerobot-rollout* \
+      || "$process_command" == *lerobot_rollout* \
+      || "$process_command" == *scripts/run_uploaded_act.sh* \
+      || "$process_command" == *scripts/run_uploaded_v11.sh* ]]; then
+      printf '%s\n' "$holder_pid"
+    fi
+  done | sort -n -u
 }
 
 hardware_rollout_interrupt_and_wait() {
@@ -53,7 +78,8 @@ hardware_rollout_interrupt_and_wait() {
 
 hardware_rollout_prepare() {
   local repo_root="$1"
-  local previous_pid=""
+  local holder_pid previous_pid=""
+  local -a holder_pids=()
   local lock_file="$repo_root/output/.hardware_rollout.lock"
 
   command -v flock >/dev/null 2>&1 || {
@@ -67,7 +93,7 @@ hardware_rollout_prepare() {
 
   mkdir -p "$repo_root/output"
   HARDWARE_ROLLOUT_PID_FILE="$repo_root/output/.active_hardware_rollout.pid"
-  exec {HARDWARE_ROLLOUT_LOCK_FD}>"$lock_file"
+  exec 9>"$lock_file"
 
   if ! flock -n "$HARDWARE_ROLLOUT_LOCK_FD"; then
     if [[ -f "$HARDWARE_ROLLOUT_PID_FILE" ]]; then
@@ -75,9 +101,24 @@ hardware_rollout_prepare() {
     fi
     if hardware_rollout_pid_is_ours "$previous_pid" "$repo_root"; then
       hardware_rollout_interrupt_and_wait "$previous_pid" "previous" || return 1
+    else
+      # The recorded leader may already be gone while one of its descendants
+      # still has the inherited lock open. Resolve the actual kernel lock
+      # holders instead of trusting an empty or stale PID file.
+      mapfile -t holder_pids < <(
+        hardware_rollout_find_managed_lock_holders "$repo_root" "$lock_file" 9>&-
+      )
+      if ((${#holder_pids[@]} == 0)); then
+        echo "The hardware lock is held by an unknown process; refusing an unsafe refresh." >&2
+        return 1
+      fi
+      echo "Refreshing stale hardware ownership held by: ${holder_pids[*]}"
+      for holder_pid in "${holder_pids[@]}"; do
+        kill -INT "$holder_pid" 2>/dev/null || true
+      done
     fi
     echo "Waiting for the previous launcher to finish hardware teardown..."
-    flock -w 10 "$HARDWARE_ROLLOUT_LOCK_FD" || {
+    flock -w 35 "$HARDWARE_ROLLOUT_LOCK_FD" || {
       echo "The previous launcher still owns the robot; refusing a second rollout." >&2
       return 1
     }
@@ -101,7 +142,13 @@ hardware_rollout_prepare() {
 hardware_rollout_run() {
   local exit_code
 
-  setsid "$@" &
+  # Keep the exclusive lock in the launcher only. If `uv` or Python inherited
+  # this descriptor, a dead launcher could leave an empty PID file while an
+  # orphaned descendant continued holding the kernel lock indefinitely.
+  (
+    exec 9>&-
+    exec setsid "$@"
+  ) &
   HARDWARE_ROLLOUT_PID=$!
   printf '%s\n' "$HARDWARE_ROLLOUT_PID" > "$HARDWARE_ROLLOUT_PID_FILE"
   echo "Managed hardware rollout PID: $HARDWARE_ROLLOUT_PID"
