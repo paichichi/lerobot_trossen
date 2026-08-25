@@ -25,13 +25,13 @@ elif [[ -d "$repo_root/../TCC-core" ]]; then
 else
   backbone_source_root="${HOME}/projects/TCC-core"
 fi
-policy_revision=466bc1e4be7d1899da7281a5d8a30add04bf7e3c
-policy_file=policies_v11_basic_chunked_mlp/ours_rn50/checkpoint_040000.pt
+policy_revision=56690ddea1023ebe840c2d0dd1a07cfad67377b0
+policy_file=policies_v11_end_to_end_rn50/ours_rn50/checkpoint_100000.pt
 backbone_file=backbones/ours_rn50/checkpoint_040000.pt
 asset_root="$repo_root/assets/tcc-policy-assets"
 raw_policy="$asset_root/$policy_file"
 backbone_checkpoint="$asset_root/$backbone_file"
-policy_path="$repo_root/checkpoints/v11_ours_rn50"
+policy_path="$repo_root/checkpoints/v11_end_to_end_ours_rn50"
 
 text_log="$repo_root/output/v11_latest.txt"
 mkdir -p "$repo_root/output"
@@ -146,11 +146,6 @@ record_command=(
   --robot.fold_goal_time_s=3.0
   --robot.fold_max_arm_error_rad=0.12
   --robot.fold_max_gripper_error_m=0.003
-  --robot.arm_max_velocity_rad_s=0.35
-  --robot.arm_max_acceleration_rad_s2=1.75
-  --robot.gripper_max_velocity_m_s=0.02
-  --robot.gripper_deadband_m=0.001
-  --robot.postprocess_max_dt_multiplier=2.0
   --robot.max_relative_target='{"joint_0": 0.07, "joint_1": 0.07, "joint_2": 0.07, "joint_3": 0.07, "joint_4": 0.07, "joint_5": 0.07, "left_carriage_joint": 0.003}'
   --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
   --strategy.type=base

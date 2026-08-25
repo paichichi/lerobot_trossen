@@ -2,4 +2,4 @@ cd ~/lerobot_trossen
 git fetch origin
 git switch stable-postprocess
 git pull --ff-only origin stable-postprocess
-bash scripts/run_uploaded_act.sh rn18 --execute
+bash scripts/run_uploaded_v11.sh --execute
