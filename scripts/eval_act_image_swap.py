@@ -29,6 +29,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--video-backend",
+        choices=("torchcodec", "pyav"),
+        help="Override the checkpoint dataset video decoder for offline diagnostics.",
+    )
     return parser.parse_args()
 
 
@@ -55,6 +60,8 @@ def main() -> None:
     checkpoint = args.checkpoint.resolve()
     cfg = TrainPipelineConfig.from_pretrained(checkpoint, local_files_only=True)
     cfg.policy.device = args.device
+    if args.video_backend is not None:
+        cfg.dataset.video_backend = args.video_backend
     _, eval_dataset = make_train_eval_datasets(cfg)
     if eval_dataset is None:
         raise RuntimeError("Checkpoint training config has no validation split")
