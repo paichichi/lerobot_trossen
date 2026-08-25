@@ -60,6 +60,24 @@ original ACT training code, complete episodes are shuffled with a fixed seed,
 80% per task are used for training, 20% for validation, and the saved checkpoint
 with the lowest validation loss is selected for robot evaluation.
 
+### Native RN50 ACT
+
+The `native_rn50_act` policy is the strict RN50 counterpart to the working
+official RN18 baseline. It keeps the complete official ACT architecture
+(`dim_model=512`, 8 heads, 3200-wide feed-forward layers, four Transformer
+encoder layers, four VAE encoder layers), both cameras, 40-action chunks, and
+10 queued actions. Only the visual backbone is replaced by the trained
+`ours_rn50` and fine-tuned end to end.
+
+This configuration is locked to native 480x640 RGB input. It preserves the
+4:3 geometry and exposes the RN50 layer4 spatial map without the legacy
+224x224 square resize. Configuration validation rejects reduced resolution,
+frozen vision weights, or ACT-lite dimensions. Train it with:
+
+```shell
+bash scripts/train_native_rn50_act.sh
+```
+
 ### Teleoperation Script
 
 Teleoperate a WidowX AI robot with another WidowX AI robot.

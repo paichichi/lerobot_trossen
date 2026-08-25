@@ -91,7 +91,15 @@ class _BackboneSpatialEncoder(nn.Module):
     def __init__(self, backbone: nn.Module, config: BackboneACTConfig) -> None:
         super().__init__()
         self.backbone = backbone
-        self.image_size = config.backbone_image_size
+        native_height = getattr(config, "backbone_image_height", None)
+        native_width = getattr(config, "backbone_image_width", None)
+        if (native_height is None) != (native_width is None):
+            raise ValueError("Backbone image height and width must be configured together")
+        self.image_shape = (
+            (int(native_height), int(native_width))
+            if native_height is not None
+            else (config.backbone_image_size, config.backbone_image_size)
+        )
         self.freeze_backbone = config.freeze_vision_backbone
         self.register_buffer(
             "image_mean",
@@ -122,13 +130,14 @@ class _BackboneSpatialEncoder(nn.Module):
             images = images.to(dtype=torch.float32)
         else:
             raise TypeError(f"Unsupported image dtype: {images.dtype}")
-        images = functional.interpolate(
-            images,
-            size=(self.image_size, self.image_size),
-            mode="bilinear",
-            align_corners=False,
-            antialias=False,
-        )
+        if tuple(images.shape[-2:]) != self.image_shape:
+            images = functional.interpolate(
+                images,
+                size=self.image_shape,
+                mode="bilinear",
+                align_corners=False,
+                antialias=True,
+            )
         mean = self.image_mean.to(dtype=images.dtype)
         std = self.image_std.to(dtype=images.dtype)
         return (images - mean) / std

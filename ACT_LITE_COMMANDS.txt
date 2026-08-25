@@ -1,5 +1,8 @@
 # Run from ~/lerobot_trossen. Ctrl+C once, then wait for "Rollout finished".
 
+# Train native 480x640 ours RN50 with the complete official ACT architecture.
+# bash scripts/train_native_rn50_act.sh
+
 # Update this branch.
 git fetch origin
 git switch act-lite-official

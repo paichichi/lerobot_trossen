@@ -6,6 +6,9 @@ import pytest
 import torch
 from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature
 from lerobot_policy_backbone_act.configuration_backbone_act import BackboneACTConfig
+from lerobot_policy_backbone_act.configuration_native_rn50_act import (
+    NativeRN50ACTConfig,
+)
 from lerobot_policy_backbone_act.modeling_backbone_act import (
     BackboneACTPolicy,
     _BackboneSpatialEncoder,
@@ -34,6 +37,16 @@ def _encoder_config(*, frozen: bool = True) -> SimpleNamespace:
     )
 
 
+def _native_encoder_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        backbone_image_height=480,
+        backbone_image_width=640,
+        backbone_image_mean=(0.485, 0.456, 0.406),
+        backbone_image_std=(0.229, 0.224, 0.225),
+        freeze_vision_backbone=False,
+    )
+
+
 def test_backbone_act_owns_visual_normalization() -> None:
     config = BackboneACTConfig()
 
@@ -51,6 +64,52 @@ def test_backbone_preprocess_matches_uint8_and_unit_float_inputs() -> None:
 
     assert from_uint8.shape == (2, 3, 224, 224)
     torch.testing.assert_close(from_uint8, from_float)
+
+
+def test_native_rn50_preprocess_preserves_480x640_geometry() -> None:
+    encoder = _BackboneSpatialEncoder(
+        _BackboneWithBatchNorm(), _native_encoder_config()
+    )
+    images = torch.randint(0, 256, (2, 3, 480, 640), dtype=torch.uint8)
+
+    processed = encoder.preprocess(images)
+
+    assert processed.shape == (2, 3, 480, 640)
+
+
+def test_native_rn50_is_locked_to_full_official_act() -> None:
+    config = NativeRN50ACTConfig()
+
+    assert config.backbone_image_height == 480
+    assert config.backbone_image_width == 640
+    assert not config.freeze_vision_backbone
+    assert config.dim_model == 512
+    assert config.n_heads == 8
+    assert config.dim_feedforward == 3200
+    assert config.n_encoder_layers == 4
+    assert config.n_decoder_layers == 1
+    assert config.n_vae_encoder_layers == 4
+    assert config.normalization_mapping["VISUAL"] == NormalizationMode.IDENTITY
+
+
+@pytest.mark.parametrize(
+    ("override", "value"),
+    [
+        ("backbone_image_height", 224),
+        ("backbone_image_width", 224),
+        ("freeze_vision_backbone", True),
+        ("dim_model", 256),
+        ("n_heads", 4),
+        ("dim_feedforward", 1024),
+        ("n_encoder_layers", 2),
+        ("n_vae_encoder_layers", 2),
+    ],
+)
+def test_native_rn50_rejects_lite_or_resized_configuration(
+    override: str, value: object
+) -> None:
+    with pytest.raises(ValueError, match="locked to native 480x640"):
+        NativeRN50ACTConfig(**{override: value})
 
 
 def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:

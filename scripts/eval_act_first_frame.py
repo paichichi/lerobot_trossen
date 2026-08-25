@@ -18,8 +18,9 @@ from lerobot.configs.train import TrainPipelineConfig
 from lerobot.datasets.factory import make_train_eval_datasets
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot.policies.factory import make_pre_post_processors
-from lerobot_policy_backbone_act import BackboneACTConfig
+from lerobot_policy_backbone_act import BackboneACTConfig, NativeRN50ACTConfig
 from lerobot_policy_backbone_act.modeling_backbone_act import BackboneACTPolicy
+from lerobot_policy_backbone_act.modeling_native_rn50_act import NativeRN50ACTPolicy
 
 
 def _args() -> argparse.Namespace:
@@ -49,7 +50,12 @@ def main() -> None:
     if eval_dataset is None:
         raise RuntimeError("Checkpoint training config has no validation split")
 
-    policy_class = BackboneACTPolicy if isinstance(cfg.policy, BackboneACTConfig) else ACTPolicy
+    if isinstance(cfg.policy, NativeRN50ACTConfig):
+        policy_class = NativeRN50ACTPolicy
+    elif isinstance(cfg.policy, BackboneACTConfig):
+        policy_class = BackboneACTPolicy
+    else:
+        policy_class = ACTPolicy
     policy = policy_class.from_pretrained(
         checkpoint,
         config=cfg.policy,
