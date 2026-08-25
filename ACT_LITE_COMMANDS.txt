@@ -3,19 +3,23 @@
 # Train ACT-RN50-full: native 480x640, dual-camera, end-to-end RN50.
 # bash scripts/train_act_rn50_full.sh
 
-# Update this branch.
+# Update the ACT-RN50-full branch.
 git fetch origin
-git switch act-lite-official
-git pull --ff-only origin act-lite-official
+git switch act-rn50-full
+git pull --ff-only origin act-rn50-full
 
 # Stop any stale rollout before starting another one.
 bash scripts/cleanup_trossen_processes.sh
 
-# Download the end-to-end ACT RN50 without moving the robot.
-bash scripts/run_uploaded_act.sh ours_rn50
+# Download ACT-RN50-full 6k without moving the robot.
+bash scripts/run_uploaded_act.sh rn50_full
 
-# Evaluate the end-to-end ACT RN50.
-bash scripts/run_uploaded_act.sh ours_rn50 --execute
+# Evaluate ACT-RN50-full 6k. Keep the E-stop ready.
+bash scripts/run_uploaded_act.sh rn50_full --execute
+
+# Previous ACT-lite RN50 comparison.
+# bash scripts/run_uploaded_act.sh ours_rn50
+# bash scripts/run_uploaded_act.sh ours_rn50 --execute
 
 # Official end-to-end RN18 comparison.
 # bash scripts/run_uploaded_act.sh rn18

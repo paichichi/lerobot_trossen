@@ -12,19 +12,24 @@ case "$model" in
     policy_revision=5f0fd733e9098ba2e4c7143d44ada99087e0ae7d
     policy_dir_name=ours_rn50_end_to_end
     ;;
+  rn50_full)
+    policy_repo=Chipaipai/act-rn50-full-carrot-100
+    policy_revision=f599bba7e80f22a513f98a8579dae6cbf44ca627
+    policy_dir_name=act_rn50_full_6k
+    ;;
   rn18)
     policy_repo=Chipaipai/act-official-rn18-carrot-100
     policy_revision=8f3cf3b8358d46928bc12271027787cc1f7b0499
     policy_dir_name=rn18
     ;;
   *)
-    echo "usage: $0 {ours_rn50|rn18} [--execute]" >&2
+    echo "usage: $0 {rn50_full|ours_rn50|rn18} [--execute]" >&2
     exit 2
     ;;
 esac
 
 if [[ "$mode" != download && "$mode" != --execute ]]; then
-  echo "usage: $0 {ours_rn50|rn18} [--execute]" >&2
+  echo "usage: $0 {rn50_full|ours_rn50|rn18} [--execute]" >&2
   exit 2
 fi
 
@@ -65,7 +70,7 @@ uv run --no-sync hf download "$policy_repo" \
   --revision "$policy_revision" \
   --local-dir "$policy_path"
 
-if [[ "$model" == ours_rn50 ]]; then
+if [[ "$model" == ours_rn50 || "$model" == rn50_full ]]; then
   export BACKBONE_SOURCE_ROOT="${BACKBONE_SOURCE_ROOT:-/home/robotarm/TCC-core}"
   export BACKBONE_CHECKPOINT="$repo_root/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt"
   uv run --no-sync hf download Chipaipai/tcc-core-real-robot-policies \
@@ -78,15 +83,21 @@ if [[ "$model" == ours_rn50 ]]; then
   fi
 fi
 
-cp "$policy_path/first_frame_report.json" "$run_dir/first_frame_report.json"
 sha256sum "$policy_path/model.safetensors" > "$run_dir/weights.sha256"
-if [[ "$model" == ours_rn50 ]]; then
+if [[ "$model" == ours_rn50 || "$model" == rn50_full ]]; then
   sha256sum "$BACKBONE_CHECKPOINT" >> "$run_dir/weights.sha256"
 fi
 
-uv run --no-sync python -c \
-  'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({"decision": d["decision"], "summary": d["summary"], "gates": d["gates"]}, indent=2))' \
-  "$policy_path/first_frame_report.json"
+if [[ -f "$policy_path/first_frame_report.json" ]]; then
+  cp "$policy_path/first_frame_report.json" "$run_dir/first_frame_report.json"
+  uv run --no-sync python -c \
+    'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({"decision": d["decision"], "summary": d["summary"], "gates": d["gates"]}, indent=2))' \
+    "$policy_path/first_frame_report.json"
+else
+  uv run --no-sync python -c \
+    'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({k:d.get(k) for k in ("type", "input_features", "output_features", "chunk_size", "n_action_steps")}, indent=2))' \
+    "$policy_path/config.json"
+fi
 if [[ "$mode" != --execute ]]; then
   echo "Downloaded only. The robot was not connected or moved."
   exit 0
@@ -110,6 +121,9 @@ rollout_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
+if [[ "$model" == rn50_full ]]; then
+  rollout_command+=(--policy.discover_packages_path=lerobot_policy_backbone_act)
+fi
 printf '%q ' "${rollout_command[@]}" > "$run_dir/resolved_command.txt"
 printf '\n' >> "$run_dir/resolved_command.txt"
 "${rollout_command[@]}"
