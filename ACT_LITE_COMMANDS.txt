@@ -1,23 +1,25 @@
-# Run from the lerobot_trossen repository root.
-# Console logs are saved under output/<model>_<UTC timestamp>/.
-# Physical evaluation uses LeRobot base mode: no rollout dataset or video is recorded.
-# Press Ctrl+C after the task; official teardown returns to the initial position.
+# Run from ~/lerobot_trossen. Ctrl+C once, then wait for "Rollout finished".
 
-# One-click cleanup if a previous LeRobot/Trossen rollout is still running.
+# Update this branch.
+git fetch origin
+git switch act-lite-official
+git pull --ff-only origin act-lite-official
+
+# Stop any stale rollout before starting another one.
 bash scripts/cleanup_trossen_processes.sh
 
-# Ours RN50: download and show the safety report (does not move the robot).
+# Download the end-to-end ACT RN50 without moving the robot.
 bash scripts/run_uploaded_act.sh ours_rn50
 
-# Ours RN50: real-robot evaluation. E-stop must be ready.
+# Evaluate the end-to-end ACT RN50.
 bash scripts/run_uploaded_act.sh ours_rn50 --execute
 
-# Official RN18 alternatives:
+# Official end-to-end RN18 comparison.
 # bash scripts/run_uploaded_act.sh rn18
 # bash scripts/run_uploaded_act.sh rn18 --execute
 
-# V11: convert the trained checkpoint to the LeRobot policy contract (no robot motion).
-bash scripts/run_uploaded_v11.sh
+# Download and convert the end-to-end V11 RN50 100k checkpoint.
+# bash scripts/run_uploaded_v11.sh
 
-# V11: execute through the official LeRobot/Trossen rollout stack.
+# Evaluate the end-to-end V11 RN50.
 # bash scripts/run_uploaded_v11.sh --execute

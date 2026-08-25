@@ -25,13 +25,13 @@ elif [[ -d "$repo_root/../TCC-core" ]]; then
 else
   backbone_source_root="${HOME}/projects/TCC-core"
 fi
-policy_revision=466bc1e4be7d1899da7281a5d8a30add04bf7e3c
-policy_file=policies_v11_basic_chunked_mlp/ours_rn50/checkpoint_040000.pt
+policy_revision=56690ddea1023ebe840c2d0dd1a07cfad67377b0
+policy_file=policies_v11_end_to_end_rn50/ours_rn50/checkpoint_100000.pt
 backbone_file=backbones/ours_rn50/checkpoint_040000.pt
 asset_root="$repo_root/assets/tcc-policy-assets"
 raw_policy="$asset_root/$policy_file"
 backbone_checkpoint="$asset_root/$backbone_file"
-policy_path="$repo_root/checkpoints/v11_ours_rn50"
+policy_path="$repo_root/checkpoints/v11_end_to_end_ours_rn50"
 
 text_log="$repo_root/output/v11_latest.txt"
 mkdir -p "$repo_root/output"

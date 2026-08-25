@@ -8,12 +8,14 @@ cd "$repo_root"
 
 case "$model" in
   ours_rn50)
-    policy_repo=Chipaipai/act-lite-ours-rn50-carrot-100
-    policy_revision=424a8456d2e43f3730e5d684b122ed151728ec23
+    policy_repo=Chipaipai/act-ours-rn50-end-to-end-carrot-100
+    policy_revision=5f0fd733e9098ba2e4c7143d44ada99087e0ae7d
+    policy_dir_name=ours_rn50_end_to_end
     ;;
   rn18)
     policy_repo=Chipaipai/act-official-rn18-carrot-100
     policy_revision=8f3cf3b8358d46928bc12271027787cc1f7b0499
+    policy_dir_name=rn18
     ;;
   *)
     echo "usage: $0 {ours_rn50|rn18} [--execute]" >&2
@@ -58,7 +60,7 @@ exec > >(tee -a "$run_dir/console.log") 2>&1
 echo "All run information will be saved to: $run_dir"
 
 uv sync --extra act
-policy_path="$repo_root/checkpoints/$model"
+policy_path="$repo_root/checkpoints/$policy_dir_name"
 uv run --no-sync hf download "$policy_repo" \
   --revision "$policy_revision" \
   --local-dir "$policy_path"

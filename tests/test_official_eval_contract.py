@@ -60,6 +60,18 @@ def test_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
     assert script.count("rollout_command=(") == 1
 
 
+def test_launchers_pin_end_to_end_rn50_checkpoints() -> None:
+    act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    v11_script = (REPO_ROOT / "scripts/run_uploaded_v11.sh").read_text()
+
+    assert "Chipaipai/act-ours-rn50-end-to-end-carrot-100" in act_script
+    assert "5f0fd733e9098ba2e4c7143d44ada99087e0ae7d" in act_script
+    assert "act-lite-ours-rn50-carrot-100" not in act_script
+    assert "policies_v11_end_to_end_rn50/ours_rn50/checkpoint_100000.pt" in v11_script
+    assert "56690ddea1023ebe840c2d0dd1a07cfad67377b0" in v11_script
+    assert "policies_v11_basic_chunked_mlp" not in v11_script
+
+
 def test_base_rollouts_do_not_create_evaluation_datasets() -> None:
     scripts = [path.read_text() for path in EVAL_LAUNCHERS]
 
