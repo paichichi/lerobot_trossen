@@ -87,7 +87,10 @@ def main() -> None:
         "n_encoder_layers": config.n_encoder_layers,
         "n_vae_encoder_layers": config.n_vae_encoder_layers,
         "loss": float(loss.detach()),
-        "losses": {key: float(value.detach()) for key, value in loss_dict.items()},
+        "losses": {
+            key: float(value.detach()) if isinstance(value, torch.Tensor) else float(value)
+            for key, value in loss_dict.items()
+        },
         "backbone_trainable": all(
             parameter.requires_grad
             for parameter in policy.model.backbone.backbone.parameters()
