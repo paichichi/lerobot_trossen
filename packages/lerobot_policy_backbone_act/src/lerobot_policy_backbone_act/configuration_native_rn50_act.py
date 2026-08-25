@@ -35,7 +35,9 @@ class ACTRN50FullConfig(ACTConfig):
     # New training uses an explicit scale-compatible visual token adapter.
     visual_adapter_version: str = "legacy"
     visual_adapter_rms_eps: float = 1e-6
-    visual_token_gain_init: float = 1.0
+    # RN18's successful checkpoint has visual-token L2 ~= 11.4 for D=512.
+    # LayerNorm yields sqrt(512), so a 0.5 gain reproduces that scale.
+    visual_token_gain_init: float = 0.5
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {

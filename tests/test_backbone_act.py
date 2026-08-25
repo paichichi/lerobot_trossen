@@ -97,6 +97,7 @@ def test_native_rn50_is_locked_to_full_official_act() -> None:
     assert config.n_vae_encoder_layers == 4
     assert config.normalization_mapping["VISUAL"] == NormalizationMode.IDENTITY
     assert config.visual_adapter_version == "legacy"
+    assert config.visual_token_gain_init == 0.5
 
 
 def test_scale_compatible_visual_adapter_normalizes_token_scale() -> None:
@@ -249,6 +250,37 @@ def test_best_act_checkpoint_uses_lowest_saved_validation_loss(tmp_path) -> None
     assert step == 4000
     assert loss == pytest.approx(0.091)
     assert checkpoint.name == "pretrained_model"
+
+
+def test_best_act_checkpoint_rejects_visually_collapsed_model(tmp_path) -> None:
+    output_dir = tmp_path / "run"
+    image_swap_dir = output_dir / "image_swap"
+    image_swap_dir.mkdir(parents=True)
+    (output_dir / "train.log").write_text(
+        "step 2000: eval_loss=0.0800\nstep 4000: eval_loss=0.0900\n"
+    )
+    for step in (2000, 4000):
+        (output_dir / "checkpoints" / f"{step:06d}" / "pretrained_model").mkdir(
+            parents=True
+        )
+    for step, paired, main in ((2000, 0.02, 0.01), (4000, 0.61, 0.57)):
+        report = {
+            "predicted_action_dispersion": {
+                "paired_images": {"dispersion_ratio_vs_recorded": paired},
+                "main_only": {"dispersion_ratio_vs_recorded": main},
+            }
+        }
+        (image_swap_dir / f"{step:06d}.json").write_text(json.dumps(report))
+
+    step, loss, _ = find_best_checkpoint(
+        output_dir,
+        image_swap_dir=image_swap_dir,
+        min_paired_ratio=0.50,
+        min_main_ratio=0.45,
+    )
+
+    assert step == 4000
+    assert loss == pytest.approx(0.09)
 
 
 def test_trossen_contract_uses_official_scalar_cap_and_point_one_seconds() -> None:

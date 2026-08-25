@@ -90,7 +90,7 @@ set -o pipefail
   --policy.scheduler_warmup_steps=1000 \
   --policy.visual_adapter_version=rms_ln_v1 \
   --policy.visual_adapter_rms_eps=1e-6 \
-  --policy.visual_token_gain_init=1.0 \
+  --policy.visual_token_gain_init=0.5 \
   --batch_size="$batch_size" \
   --num_workers=8 \
   --prefetch_factor=4 \
@@ -103,6 +103,20 @@ set -o pipefail
   --wandb.enable=false \
   2>&1 | tee "$train_log"
 
+image_swap_dir="$output_dir/image_swap"
+mkdir -p "$image_swap_dir"
+for checkpoint_dir in "$output_dir"/checkpoints/[0-9]*; do
+  [[ -d "$checkpoint_dir/pretrained_model" ]] || continue
+  checkpoint_step="$(basename "$checkpoint_dir")"
+  .venv/bin/python scripts/eval_act_image_swap.py \
+    "$checkpoint_dir/pretrained_model" \
+    --output "$image_swap_dir/$checkpoint_step.json" \
+    --device cuda
+done
+
 .venv/bin/python scripts/select_best_act_checkpoint.py \
   "$output_dir" \
-  --log-path="$train_log"
+  --log-path="$train_log" \
+  --image-swap-dir="$image_swap_dir" \
+  --min-paired-ratio=0.50 \
+  --min-main-ratio=0.45
