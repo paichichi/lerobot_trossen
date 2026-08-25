@@ -9,8 +9,8 @@ source "$repo_root/scripts/hardware_rollout_lifecycle.sh"
 
 case "$model" in
   ours_rn50)
-    policy_repo=Chipaipai/act-lite-ours-rn50-carrot-100
-    policy_revision=424a8456d2e43f3730e5d684b122ed151728ec23
+    policy_repo=Chipaipai/act-ours-rn50-end-to-end-carrot-100
+    policy_revision=5f0fd733e9098ba2e4c7143d44ada99087e0ae7d
     ;;
   rn18)
     policy_repo=Chipaipai/act-official-rn18-carrot-100

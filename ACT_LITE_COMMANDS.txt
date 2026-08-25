@@ -3,9 +3,13 @@ git fetch origin
 git switch stable-postprocess
 git pull --ff-only origin stable-postprocess
 
-# V11 (active command)
+# End-to-end ACT RN50 (active command)
+# bash scripts/run_uploaded_act.sh ours_rn50
+bash scripts/run_uploaded_act.sh ours_rn50 --execute
+
+# V11 alternative
 # bash scripts/run_uploaded_v11.sh
-bash scripts/run_uploaded_v11.sh --execute
+# bash scripts/run_uploaded_v11.sh --execute
 
 # Official RN18 alternative (uncomment exactly one command when needed)
 # bash scripts/run_uploaded_act.sh rn18
