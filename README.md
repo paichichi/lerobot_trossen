@@ -72,6 +72,9 @@ normalization inside the RN50, a spatial layer4 map without global pooling,
 and end-to-end backbone fine-tuning. The training recipe uses conservative
 differential learning rates, cosine decay with warmup, image augmentation,
 and best-validation checkpoint selection to reduce overfitting on 100 demos.
+The augmentation preset emphasizes lighting, color, and sharpness changes;
+spatial translation is capped at 2% with no rotation so localization labels
+remain meaningful.
 
 ```shell
 bash scripts/train_act_rn50_full.sh

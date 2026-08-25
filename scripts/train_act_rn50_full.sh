@@ -13,7 +13,6 @@ steps="${ACT_STEPS:-50000}"
 batch_size="${ACT_BATCH_SIZE:-16}"
 eval_steps="${ACT_EVAL_STEPS:-2000}"
 save_freq="${ACT_SAVE_FREQ:-2000}"
-augmentation="${ACT_IMAGE_AUGMENTATION:-true}"
 output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/act_rn50_full_carrot_100_50k}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
 
@@ -57,9 +56,7 @@ set -o pipefail
   --dataset.eval_split=0.2 \
   --dataset.return_uint8=true \
   --dataset.video_backend=torchcodec \
-  --dataset.image_transforms.enable="$augmentation" \
-  --dataset.image_transforms.max_num_transforms=3 \
-  --dataset.image_transforms.random_order=false \
+  --image_transforms="$repo_root/configs/act_rn50_full_image_transforms.yaml" \
   --policy.discover_packages_path=lerobot_policy_backbone_act \
   --policy.type=act_rn50_full \
   --policy.repo_id=Chipaipai/act-rn50-full-carrot-100 \
