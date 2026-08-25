@@ -37,6 +37,7 @@ episode_order="$(.venv/bin/python scripts/make_act_episode_order.py \
   --repo-id=UoA-Trossen-Arm/pick_and_place_carrot_100 \
   --root="$dataset_root" \
   --seed=1000 | tail -n 1)"
+image_transforms="$(<"$repo_root/configs/act_rn50_full_image_transforms.json")"
 
 export BACKBONE_SOURCE_ROOT="$backbone_source_root"
 export BACKBONE_CHECKPOINT="$backbone_checkpoint"
@@ -56,7 +57,10 @@ set -o pipefail
   --dataset.eval_split=0.2 \
   --dataset.return_uint8=true \
   --dataset.video_backend=torchcodec \
-  --image_transforms="$repo_root/configs/act_rn50_full_image_transforms.yaml" \
+  --dataset.image_transforms.enable=true \
+  --dataset.image_transforms.max_num_transforms=2 \
+  --dataset.image_transforms.random_order=false \
+  --dataset.image_transforms.tfs="$image_transforms" \
   --policy.discover_packages_path=lerobot_policy_backbone_act \
   --policy.type=act_rn50_full \
   --policy.repo_id=Chipaipai/act-rn50-full-carrot-100 \
