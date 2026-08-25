@@ -114,22 +114,20 @@ def test_best_act_checkpoint_uses_lowest_saved_validation_loss(tmp_path) -> None
     assert checkpoint.name == "pretrained_model"
 
 
-def test_trossen_contract_supports_unit_specific_caps_and_point_one_seconds() -> None:
+def test_trossen_contract_uses_official_scalar_cap_and_point_one_seconds() -> None:
     config_module = pytest.importorskip(
         "lerobot_robot_trossen.config_widowxai_follower"
     )
     config_class = config_module.WidowXAIFollowerConfig
-    caps = {f"joint_{index}": 0.07 for index in range(6)}
-    caps["left_carriage_joint"] = 0.003
     config = config_class(
         ip_address="192.168.1.4",
         loop_rate=20,
         min_time_to_move_multiplier=2.0,
-        max_relative_target=caps,
+        max_relative_target=0.07,
     )
 
     assert config.min_time_to_move_multiplier / config.loop_rate == pytest.approx(0.1)
-    assert config.max_relative_target == caps
+    assert config.max_relative_target == pytest.approx(0.07)
 
 
 @pytest.mark.skipif(

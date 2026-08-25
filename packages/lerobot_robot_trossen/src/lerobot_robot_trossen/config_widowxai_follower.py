@@ -12,9 +12,9 @@ class WidowXAIFollowerConfig(RobotConfig):
     ip_address: str
 
     # `max_relative_target` limits the magnitude of the relative positional target vector for
-    # safety purposes. Set this to a positive scalar for the same value on every motor, or a
-    # dictionary keyed by joint name when arm joints (rad) and the gripper (m) need different caps.
-    max_relative_target: float | dict[str, float] | None = 5.0
+    # safety purposes. Set this to a positive scalar to have the same value for all motors, or a
+    # list that is the same length as the number of motors in your follower arms.
+    max_relative_target: float | None = 5.0
 
     # Multiplier for computing minimum time (in seconds) for the arm to reach a target position.
     # The final goal time is computed as: min_time_to_move = multiplier / fps.
