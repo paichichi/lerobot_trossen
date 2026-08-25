@@ -92,7 +92,7 @@ echo "[5/5] Starting hardware rollout"
   'import sys, torch; available = torch.cuda.is_available(); print("CUDA device:", torch.cuda.get_device_name(0) if available else "unavailable"); sys.exit(0 if available else 1)'
 echo "Starting official LeRobot base rollout for V11. Keep the E-stop ready."
 echo "This policy has no task-completion output; press Ctrl+C after success."
-echo "Time scaling: policy actions at 10 Hz, interpolated to the 20 Hz driver loop."
+echo "Action timing: native 20 Hz policy and 20 Hz driver loop; no extra smoothing."
 record_command=(
   "$uv_bin" run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
@@ -118,8 +118,7 @@ record_command=(
   --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}}'
   --strategy.type=base
   --device=cuda
-  --fps=10
-  --interpolation_multiplier=2
+  --fps=20
   --duration=0
   --task="Pick up the carrot and place it in the pan"
   --return_to_initial_position=true
