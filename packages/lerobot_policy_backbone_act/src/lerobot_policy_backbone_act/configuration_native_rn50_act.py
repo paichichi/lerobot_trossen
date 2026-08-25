@@ -31,8 +31,9 @@ class ACTRN50FullConfig(ACTConfig):
     optimizer_lr_backbone: float = 1e-6
     optimizer_weight_decay: float = 1e-4
     scheduler_warmup_steps: int = 1000
-    # `legacy` preserves checkpoints trained before the visual-collapse audit.
-    # New training uses an explicit scale-compatible visual token adapter.
+    # `full_adapter_v1` is the official ACT 1x1 visual projection used by the
+    # former lite experiment, now evaluated inside the same full ACT contract.
+    # `legacy` remains an exact checkpoint-compatibility alias only.
     visual_adapter_version: str = "legacy"
     visual_adapter_rms_eps: float = 1e-6
     # RN18's successful checkpoint has visual-token L2 ~= 11.4 for D=512.
@@ -78,9 +79,14 @@ class ACTRN50FullConfig(ACTConfig):
             raise ValueError("Backbone image std values must be positive")
         if self.scheduler_warmup_steps < 0:
             raise ValueError("scheduler_warmup_steps must be non-negative")
-        if self.visual_adapter_version not in {"legacy", "rms_ln_v1"}:
+        if self.visual_adapter_version not in {
+            "legacy",
+            "full_adapter_v1",
+            "rms_ln_v1",
+        }:
             raise ValueError(
-                "visual_adapter_version must be 'legacy' or 'rms_ln_v1'"
+                "visual_adapter_version must be 'legacy', 'full_adapter_v1', "
+                "or 'rms_ln_v1'"
             )
         if self.visual_adapter_rms_eps <= 0:
             raise ValueError("visual_adapter_rms_eps must be positive")

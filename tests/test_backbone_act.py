@@ -133,6 +133,12 @@ def test_native_rn50_rejects_unknown_visual_adapter() -> None:
         ACTRN50FullConfig(visual_adapter_version="unknown")
 
 
+def test_full_adapter_v1_uses_official_act_projection_contract() -> None:
+    config = ACTRN50FullConfig(visual_adapter_version="full_adapter_v1")
+
+    assert config.visual_adapter_version == "full_adapter_v1"
+
+
 @pytest.mark.parametrize(
     ("override", "value"),
     [
