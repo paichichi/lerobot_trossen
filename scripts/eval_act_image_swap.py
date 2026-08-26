@@ -83,6 +83,11 @@ def main() -> None:
     checkpoint = args.checkpoint.resolve()
     cfg = TrainPipelineConfig.from_pretrained(checkpoint, local_files_only=True)
     cfg.policy.device = args.device
+    # Diagnostics must be repeatable; training-time photometric transforms
+    # otherwise change the camera frames every time a checkpoint is measured.
+    cfg.dataset.image_transforms.enable = False
+    torch.manual_seed(0)
+    np.random.seed(0)
     if args.video_backend is not None:
         cfg.dataset.video_backend = args.video_backend
     train_dataset, eval_dataset = make_train_eval_datasets(cfg)
