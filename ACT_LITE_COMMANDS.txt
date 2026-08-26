@@ -1,9 +1,5 @@
 # Run from ~/lerobot_trossen. Ctrl+C once, then wait for "Rollout finished".
 
-# Train ACT-RN50-full for 10k steps: random 80 train / 20 validation,
-# native 480x640, dual-camera, end-to-end RN50.
-# bash scripts/train_act_rn50_full.sh
-
 # Update the ACT-RN50-full branch.
 git fetch origin
 git switch act-rn50-full
@@ -12,28 +8,16 @@ git pull --ff-only origin act-rn50-full
 # Stop any stale rollout before starting another one.
 bash scripts/cleanup_trossen_processes.sh
 
-# Download ACT-RN50-full 6k without moving the robot.
-bash scripts/run_uploaded_act.sh rn50_full
+# Recommended: download RN50 rms_ln_v1 5k without moving the robot.
+bash scripts/run_uploaded_act.sh rn50_rms_5k
 
-# Evaluate ACT-RN50-full 6k. Keep the E-stop ready.
-bash scripts/run_uploaded_act.sh rn50_full --execute
+# Recommended: evaluate RN50 rms_ln_v1 5k. Keep the E-stop ready.
+bash scripts/run_uploaded_act.sh rn50_rms_5k --execute
 
-# Download ACT-RN50-full 36k without moving the robot.
-bash scripts/run_uploaded_act.sh rn50_full_36k
+# A/B comparison: RN50 rms_ln_v1 8k has stronger image-swap response.
+# bash scripts/run_uploaded_act.sh rn50_rms_8k
+# bash scripts/run_uploaded_act.sh rn50_rms_8k --execute
 
-# Evaluate ACT-RN50-full 36k. Keep the E-stop ready.
-bash scripts/run_uploaded_act.sh rn50_full_36k --execute
-
-# Previous ACT-lite RN50 comparison.
-# bash scripts/run_uploaded_act.sh ours_rn50
-# bash scripts/run_uploaded_act.sh ours_rn50 --execute
-
-# Official end-to-end RN18 comparison.
+# Successful official ACT-RN18-full baseline.
 # bash scripts/run_uploaded_act.sh rn18
 # bash scripts/run_uploaded_act.sh rn18 --execute
-
-# Download and convert the end-to-end V11 RN50 100k checkpoint.
-# bash scripts/run_uploaded_v11.sh
-
-# Evaluate the end-to-end V11 RN50.
-# bash scripts/run_uploaded_v11.sh --execute
