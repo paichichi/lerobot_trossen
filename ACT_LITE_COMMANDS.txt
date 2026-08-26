@@ -1,23 +1,11 @@
-# Run from ~/lerobot_trossen. Ctrl+C once, then wait for "Rollout finished".
-
-# Update the ACT-RN50-full branch.
+# Run from ~/lerobot_trossen.
 git fetch origin
 git switch act-rn50-full
 git pull --ff-only origin act-rn50-full
 
-# Stop any stale rollout before starting another one.
 bash scripts/cleanup_trossen_processes.sh
 
-# Recommended: download RN50 rms_ln_v1 5k without moving the robot.
-bash scripts/run_uploaded_act.sh rn50_rms_5k
+bash scripts/run_uploaded_act.sh rn50_train100_8k
 
-# Recommended: evaluate RN50 rms_ln_v1 5k. Keep the E-stop ready.
-bash scripts/run_uploaded_act.sh rn50_rms_5k --execute
-
-# A/B comparison: RN50 rms_ln_v1 8k has stronger image-swap response.
-# bash scripts/run_uploaded_act.sh rn50_rms_8k
-# bash scripts/run_uploaded_act.sh rn50_rms_8k --execute
-
-# Successful official ACT-RN18-full baseline.
-# bash scripts/run_uploaded_act.sh rn18
-# bash scripts/run_uploaded_act.sh rn18 --execute
+# Keep the E-stop ready. Ctrl+C once after success, then wait for cleanup.
+bash scripts/run_uploaded_act.sh rn50_train100_8k --execute
