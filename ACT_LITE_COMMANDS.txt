@@ -5,17 +5,8 @@ git pull --ff-only origin act-rn50-full
 
 bash scripts/cleanup_trossen_processes.sh
 
-# 6K with n_action_steps=5: download and inspect only (does not move the robot).
-bash scripts/run_uploaded_act.sh rn50_train100_6k download 5
+# 8K with n_action_steps=5: download and inspect only (does not move the robot).
+bash scripts/run_uploaded_act.sh rn50_train100_8k download 5
 
-# 6K with n_action_steps=5: physical evaluation.
-bash scripts/run_uploaded_act.sh rn50_train100_6k --execute 5
-
-# Clean once before switching checkpoints.
-bash scripts/cleanup_trossen_processes.sh
-
-# 7K with n_action_steps=5: download and inspect only (does not move the robot).
-bash scripts/run_uploaded_act.sh rn50_train100_7k download 5
-
-# 7K with n_action_steps=5: physical evaluation. Keep the E-stop ready.
-bash scripts/run_uploaded_act.sh rn50_train100_7k --execute 5
+# 8K with n_action_steps=5: physical evaluation. Keep the E-stop ready.
+bash scripts/run_uploaded_act.sh rn50_train100_8k --execute 5
