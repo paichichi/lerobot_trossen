@@ -62,9 +62,9 @@ def main() -> None:
     cfg.policy.device = args.device
     if args.video_backend is not None:
         cfg.dataset.video_backend = args.video_backend
-    _, eval_dataset = make_train_eval_datasets(cfg)
-    if eval_dataset is None:
-        raise RuntimeError("Checkpoint training config has no validation split")
+    train_dataset, eval_dataset = make_train_eval_datasets(cfg)
+    diagnostic_dataset = eval_dataset or train_dataset
+    diagnostic_split = "validation" if eval_dataset is not None else "training"
 
     if isinstance(cfg.policy, ACTRN50FullConfig):
         policy_class = ACTRN50FullPolicy
@@ -83,15 +83,15 @@ def main() -> None:
         preprocessor_overrides={"device_processor": {"device": args.device}},
     )
 
-    frame_indices = eval_dataset.hf_dataset["frame_index"]
+    frame_indices = diagnostic_dataset.hf_dataset["frame_index"]
     first_rows = [index for index, frame in enumerate(frame_indices) if int(frame) == 0]
-    samples = [eval_dataset[index] for index in first_rows]
-    if len(samples) != len(eval_dataset.episodes):
+    samples = [diagnostic_dataset[index] for index in first_rows]
+    if len(samples) != len(diagnostic_dataset.episodes):
         raise RuntimeError(
-            f"Expected {len(eval_dataset.episodes)} first frames, found {len(samples)}"
+            f"Expected {len(diagnostic_dataset.episodes)} first frames, found {len(samples)}"
         )
 
-    camera_keys = list(eval_dataset.meta.camera_keys)
+    camera_keys = list(diagnostic_dataset.meta.camera_keys)
     if len(camera_keys) != 2:
         raise RuntimeError(f"Expected two cameras, found {camera_keys}")
     main_key = next(key for key in camera_keys if key.endswith("cam_main"))
@@ -167,6 +167,7 @@ def main() -> None:
     report = {
         "checkpoint": str(checkpoint),
         "device": args.device,
+        "diagnostic_split": diagnostic_split,
         "validation_episodes": episodes,
         "reference_episode": episodes[0],
         "fixed_inputs": ["observation.state", "observation.cartesian_position"],
