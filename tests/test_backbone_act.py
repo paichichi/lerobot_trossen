@@ -22,7 +22,7 @@ from lerobot_policy_backbone_act.modeling_native_rn50_act import (
 )
 from torch import nn
 
-from scripts.eval_act_image_swap import dispersion
+from scripts.eval_act_image_swap import alignment, dispersion
 from scripts.make_act_episode_order import shuffled_episode_order
 from scripts.select_best_act_checkpoint import find_best_checkpoint
 
@@ -243,6 +243,18 @@ def test_image_swap_dispersion_detects_output_collapse() -> None:
 
     assert dispersion(collapsed)["rms_about_mean"] == 0.0
     assert dispersion(responsive)["rms_about_mean"] > 0.0
+
+
+def test_image_swap_alignment_detects_correct_and_reversed_directions() -> None:
+    recorded = np.zeros((4, 2, 2), dtype=np.float32)
+    recorded[:, :, 0] = np.arange(4, dtype=np.float32)[:, None]
+
+    aligned = alignment(recorded.copy(), recorded)
+    reversed_direction = alignment(-recorded, recorded)
+
+    assert aligned["mean_episode_direction_cosine_vs_recorded"] == pytest.approx(1.0)
+    assert aligned["global_centered_correlation_vs_recorded"] == pytest.approx(1.0)
+    assert reversed_direction["mean_episode_direction_cosine_vs_recorded"] == pytest.approx(-1.0)
 
 
 def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:

@@ -55,6 +55,29 @@ def dispersion(actions: np.ndarray) -> dict[str, object]:
     }
 
 
+def alignment(predicted: np.ndarray, recorded: np.ndarray) -> dict[str, float]:
+    """Measure whether image-driven deviations point like recorded actions."""
+    predicted_centered = predicted - predicted.mean(axis=0, keepdims=True)
+    recorded_centered = recorded - recorded.mean(axis=0, keepdims=True)
+    predicted_flat = predicted_centered.reshape(predicted.shape[0], -1)
+    recorded_flat = recorded_centered.reshape(recorded.shape[0], -1)
+    numerator = (predicted_flat * recorded_flat).sum(axis=1)
+    denominator = np.linalg.norm(predicted_flat, axis=1) * np.linalg.norm(
+        recorded_flat, axis=1
+    )
+    cosine = numerator / np.maximum(denominator, 1e-12)
+    global_correlation = np.corrcoef(
+        predicted_centered.reshape(-1), recorded_centered.reshape(-1)
+    )[0, 1]
+    return {
+        "mean_episode_direction_cosine_vs_recorded": float(cosine.mean()),
+        "global_centered_correlation_vs_recorded": float(global_correlation),
+        "mean_l2_error_vs_recorded": float(
+            np.linalg.norm((predicted - recorded).reshape(predicted.shape[0], -1), axis=1).mean()
+        ),
+    }
+
+
 def main() -> None:
     args = parse_args()
     checkpoint = args.checkpoint.resolve()
@@ -154,6 +177,7 @@ def main() -> None:
         stats["mean_l2_change_after_episode_image_swap"] = float(
             np.linalg.norm((array - rolled).reshape(array.shape[0], -1), axis=1).mean()
         )
+        stats.update(alignment(array, recorded_array))
         scenario_stats[name] = stats
 
     paired_ratio = scenario_stats["paired_images"]["dispersion_ratio_vs_recorded"]
