@@ -45,7 +45,7 @@ def main() -> None:
         backbone_source_root=str(args.backbone_source_root),
         chunk_size=40,
         n_action_steps=10,
-        visual_adapter_version="rms_ln_v1",
+        visual_adapter_version="spatial_grounded_v1",
     )
     policy = ACTRN50FullPolicy(config).cuda().train()
     batch = {
@@ -68,13 +68,14 @@ def main() -> None:
         "action_is_pad": torch.zeros(
             args.batch_size, 40, dtype=torch.bool, device="cuda"
         ),
+        "frame_index": torch.zeros(args.batch_size, dtype=torch.long, device="cuda"),
     }
 
     torch.cuda.reset_peak_memory_stats()
     with torch.no_grad():
-        feature_map = policy.model.backbone(
-            batch["observation.images.cam_main"]
-        )["feature_map"]
+        feature_map = policy.model.backbone(batch["observation.images.cam_main"])[
+            "feature_map"
+        ]
         visual_tokens = policy.model.encoder_img_feat_input_proj(feature_map)
         state_token = policy.model.encoder_robot_state_input_proj(
             batch["observation.state"]
@@ -97,7 +98,9 @@ def main() -> None:
         "n_vae_encoder_layers": config.n_vae_encoder_layers,
         "loss": float(loss.detach()),
         "losses": {
-            key: float(value.detach()) if isinstance(value, torch.Tensor) else float(value)
+            key: float(value.detach())
+            if isinstance(value, torch.Tensor)
+            else float(value)
             for key, value in loss_dict.items()
         },
         "backbone_trainable": all(

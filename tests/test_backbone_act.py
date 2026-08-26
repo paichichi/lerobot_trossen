@@ -17,7 +17,9 @@ from lerobot_policy_backbone_act.modeling_backbone_act import (
     _load_upstream_backbone,
 )
 from lerobot_policy_backbone_act.modeling_native_rn50_act import (
+    _automatic_carrot_heatmap_targets,
     _ScaleCompatibleVisualTokenAdapter,
+    _SpatialGroundedVisualTokenAdapter,
 )
 from torch import nn
 
@@ -102,16 +104,16 @@ def test_native_rn50_is_locked_to_full_official_act() -> None:
 
 def test_scale_compatible_visual_adapter_normalizes_token_scale() -> None:
     torch.manual_seed(0)
-    adapter = _ScaleCompatibleVisualTokenAdapter(
-        2048, 512, rms_eps=1e-6, gain_init=1.0
-    )
+    adapter = _ScaleCompatibleVisualTokenAdapter(2048, 512, rms_eps=1e-6, gain_init=1.0)
     feature_map = torch.randn(2, 2048, 3, 4) * 0.006
 
     tokens = adapter(feature_map)
     token_rms = tokens.float().square().mean(dim=1).sqrt()
 
     assert tokens.shape == (2, 512, 3, 4)
-    torch.testing.assert_close(token_rms, torch.ones_like(token_rms), atol=2e-4, rtol=2e-4)
+    torch.testing.assert_close(
+        token_rms, torch.ones_like(token_rms), atol=2e-4, rtol=2e-4
+    )
     assert torch.isfinite(tokens).all()
 
 
@@ -137,6 +139,50 @@ def test_full_adapter_v1_uses_official_act_projection_contract() -> None:
     config = ACTRN50FullConfig(visual_adapter_version="full_adapter_v1")
 
     assert config.visual_adapter_version == "full_adapter_v1"
+
+
+def test_spatial_grounded_config_matches_rn18_optimizer_scale() -> None:
+    config = ACTRN50FullConfig(
+        visual_adapter_version="spatial_grounded_v1",
+        optimizer_lr=1e-5,
+        optimizer_lr_backbone=1e-5,
+    )
+
+    assert config.spatial_heatmap_loss_weight == pytest.approx(0.1)
+    assert config.spatial_attention_gain == pytest.approx(0.5)
+    assert config.optimizer_lr == pytest.approx(config.optimizer_lr_backbone)
+
+
+def test_automatic_carrot_heatmap_accepts_orange_and_rejects_yellow() -> None:
+    images = torch.zeros(2, 3, 120, 160)
+    images[0, 0, 40:80, 60:100] = 0.95
+    images[0, 1, 40:80, 60:100] = 0.35
+    images[0, 2, 40:80, 60:100] = 0.05
+    images[1, 0, 40:80, 60:100] = 0.95
+    images[1, 1, 40:80, 60:100] = 0.80
+    images[1, 2, 40:80, 60:100] = 0.05
+
+    targets, valid = _automatic_carrot_heatmap_targets(images, (15, 20))
+
+    assert valid.tolist() == [True, False]
+    assert targets[0, 0, 7, 10] > 0
+    assert targets[0].sum() == pytest.approx(1.0)
+
+
+def test_spatial_adapter_gates_only_the_selected_main_camera() -> None:
+    adapter = _SpatialGroundedVisualTokenAdapter(
+        8, 4, rms_eps=1e-6, gain_init=1.0, attention_gain=0.5
+    )
+    feature_map = torch.randn(2, 8, 3, 4)
+
+    adapter.reset_forward_cache(main_camera_index=1)
+    wrist = adapter(feature_map)
+    assert adapter.last_main_heatmap_logits is None
+    main = adapter(feature_map)
+
+    assert wrist.shape == main.shape == (2, 4, 3, 4)
+    assert adapter.last_main_heatmap_logits is not None
+    assert adapter.last_main_heatmap_logits.shape == (2, 1, 3, 4)
 
 
 @pytest.mark.parametrize(
@@ -172,9 +218,7 @@ def test_act_rn50_full_capacity_is_tunable_without_changing_visual_contract() ->
 
 def test_act_rn50_full_augmentation_is_photometric_only() -> None:
     config_path = (
-        Path(__file__).parents[1]
-        / "configs"
-        / "act_rn50_full_image_transforms.json"
+        Path(__file__).parents[1] / "configs" / "act_rn50_full_image_transforms.json"
     )
     transforms = json.loads(config_path.read_text())
 
@@ -182,7 +226,6 @@ def test_act_rn50_full_augmentation_is_photometric_only() -> None:
         "brightness",
         "contrast",
         "saturation",
-        "hue",
         "sharpness",
     }
     assert all(transform["type"] != "RandomAffine" for transform in transforms.values())
@@ -223,7 +266,9 @@ def test_deployment_environment_overrides_serialized_training_paths(
     monkeypatch.setenv("BACKBONE_CHECKPOINT", str(checkpoint))
     monkeypatch.setenv("BACKBONE_SOURCE_ROOT", str(source_root))
 
-    with pytest.raises(FileNotFoundError, match=str(source_root / "xirl" / "models.py")):
+    with pytest.raises(
+        FileNotFoundError, match=str(source_root / "xirl" / "models.py")
+    ):
         _load_upstream_backbone(
             BackboneACTConfig(
                 backbone_checkpoint="/training/machine/missing.pt",

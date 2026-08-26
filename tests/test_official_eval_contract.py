@@ -93,9 +93,9 @@ def test_base_rollouts_do_not_create_evaluation_datasets() -> None:
         assert "rollout_dataset" not in script
 
 
-def test_rn50_only_replaces_the_official_act_visual_input_path() -> None:
-    policy_classes = (BackboneACTPolicy, ACTRN50FullPolicy)
-    assert all(issubclass(policy_class, ACTPolicy) for policy_class in policy_classes)
+def test_rn50_preserves_official_act_control_contract() -> None:
+    assert issubclass(BackboneACTPolicy, ACTPolicy)
+    assert issubclass(ACTRN50FullPolicy, ACTPolicy)
     action_methods = {
         "forward",
         "predict_action_chunk",
@@ -103,10 +103,11 @@ def test_rn50_only_replaces_the_official_act_visual_input_path() -> None:
         "select_action",
         "update",
     }
-    assert all(
-        not action_methods.intersection(policy_class.__dict__)
-        for policy_class in policy_classes
-    )
+    assert not action_methods.intersection(BackboneACTPolicy.__dict__)
+    assert action_methods.intersection(ACTRN50FullPolicy.__dict__) == {
+        "forward",
+        "predict_action_chunk",
+    }
 
 
 def test_mlp_adapter_has_one_main_camera_and_absolute_joint_actions() -> None:

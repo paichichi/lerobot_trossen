@@ -14,11 +14,11 @@ batch_size="${ACT_BATCH_SIZE:-16}"
 eval_steps="${ACT_EVAL_STEPS:-0}"
 save_freq="${ACT_SAVE_FREQ:-1000}"
 eval_split="${ACT_EVAL_SPLIT:-0.0}"
-visual_adapter_version="${ACT_VISUAL_ADAPTER_VERSION:-rms_ln_v1}"
+visual_adapter_version="${ACT_VISUAL_ADAPTER_VERSION:-spatial_grounded_v1}"
 case "$visual_adapter_version" in
-  full_adapter_v1|rms_ln_v1) ;;
+  full_adapter_v1|rms_ln_v1|spatial_grounded_v1) ;;
   *)
-    echo "New training requires ACT_VISUAL_ADAPTER_VERSION=full_adapter_v1 or rms_ln_v1" >&2
+    echo "New training requires ACT_VISUAL_ADAPTER_VERSION=full_adapter_v1, rms_ln_v1, or spatial_grounded_v1" >&2
     exit 2
     ;;
 esac
@@ -64,6 +64,11 @@ if [[ -d "$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu" ]]; then
   export LD_LIBRARY_PATH="$repo_root/.local/ffmpeg6/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
+.venv/bin/python scripts/audit_carrot_spatial_pseudolabels.py \
+  --dataset-root="$dataset_root" \
+  --output="$output_dir.pseudo_label_audit.json" \
+  --minimum-valid-fraction=0.95
+
 mkdir -p "$(dirname "$output_dir")"
 set -o pipefail
 /usr/bin/time -f "WALL=%e RSS_KB=%M" .venv/bin/lerobot-train \
@@ -98,13 +103,16 @@ set -o pipefail
   --policy.n_decoder_layers=1 \
   --policy.n_vae_encoder_layers=4 \
   --policy.dropout=0.1 \
-  --policy.optimizer_lr=1e-4 \
-  --policy.optimizer_lr_backbone=1e-6 \
+  --policy.optimizer_lr=1e-5 \
+  --policy.optimizer_lr_backbone=1e-5 \
   --policy.optimizer_weight_decay=1e-4 \
   --policy.scheduler_warmup_steps=1000 \
   --policy.visual_adapter_version="$visual_adapter_version" \
   --policy.visual_adapter_rms_eps=1e-6 \
   --policy.visual_token_gain_init=0.5 \
+  --policy.spatial_heatmap_loss_weight=0.1 \
+  --policy.spatial_attention_gain=0.5 \
+  --policy.spatial_supervision_max_frame=80 \
   --batch_size="$batch_size" \
   --num_workers=8 \
   --prefetch_factor=4 \

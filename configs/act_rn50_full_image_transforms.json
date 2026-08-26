@@ -14,11 +14,6 @@
     "type": "ColorJitter",
     "kwargs": {"saturation": [0.8, 1.2]}
   },
-  "hue": {
-    "weight": 0.5,
-    "type": "ColorJitter",
-    "kwargs": {"hue": [-0.02, 0.02]}
-  },
   "sharpness": {
     "weight": 1.0,
     "type": "SharpnessJitter",

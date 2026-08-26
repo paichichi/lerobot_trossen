@@ -39,6 +39,9 @@ class ACTRN50FullConfig(ACTConfig):
     # RN18's successful checkpoint has visual-token L2 ~= 11.4 for D=512.
     # LayerNorm yields sqrt(512), so a 0.5 gain reproduces that scale.
     visual_token_gain_init: float = 0.5
+    spatial_heatmap_loss_weight: float = 0.1
+    spatial_attention_gain: float = 0.5
+    spatial_supervision_max_frame: int = 80
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -83,15 +86,22 @@ class ACTRN50FullConfig(ACTConfig):
             "legacy",
             "full_adapter_v1",
             "rms_ln_v1",
+            "spatial_grounded_v1",
         }:
             raise ValueError(
                 "visual_adapter_version must be 'legacy', 'full_adapter_v1', "
-                "or 'rms_ln_v1'"
+                "'rms_ln_v1', or 'spatial_grounded_v1'"
             )
         if self.visual_adapter_rms_eps <= 0:
             raise ValueError("visual_adapter_rms_eps must be positive")
         if self.visual_token_gain_init <= 0:
             raise ValueError("visual_token_gain_init must be positive")
+        if self.spatial_heatmap_loss_weight < 0:
+            raise ValueError("spatial_heatmap_loss_weight must be non-negative")
+        if not 0 <= self.spatial_attention_gain <= 1:
+            raise ValueError("spatial_attention_gain must be in [0, 1]")
+        if self.spatial_supervision_max_frame <= 0:
+            raise ValueError("spatial_supervision_max_frame must be positive")
 
     def get_scheduler_preset(self) -> CosineAnnealingWithWarmupSchedulerConfig:
         return CosineAnnealingWithWarmupSchedulerConfig(
