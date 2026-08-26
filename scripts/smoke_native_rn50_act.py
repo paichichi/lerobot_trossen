@@ -48,15 +48,18 @@ def main() -> None:
         visual_adapter_version="spatial_grounded_v1",
     )
     policy = ACTRN50FullPolicy(config).cuda().train()
+    main_images = torch.full(
+        (args.batch_size, 3, 480, 640), 128, dtype=torch.uint8, device="cuda"
+    )
+    for index in range(args.batch_size):
+        y0 = 120 + (index % 4) * 30
+        x0 = 160 + (index % 8) * 35
+        main_images[index, 0, y0 : y0 + 40, x0 : x0 + 30] = 242
+        main_images[index, 1, y0 : y0 + 40, x0 : x0 + 30] = 89
+        main_images[index, 2, y0 : y0 + 40, x0 : x0 + 30] = 13
     batch = {
         "observation.state": torch.randn(args.batch_size, 7, device="cuda"),
-        "observation.images.cam_main": torch.randint(
-            0,
-            256,
-            (args.batch_size, 3, 480, 640),
-            dtype=torch.uint8,
-            device="cuda",
-        ),
+        "observation.images.cam_main": main_images,
         "observation.images.cam_wrist": torch.randint(
             0,
             256,
@@ -88,6 +91,7 @@ def main() -> None:
         for parameter in policy.model.backbone.backbone.parameters()
         if parameter.requires_grad
     ]
+    heatmap_grad = policy.model.encoder_img_feat_input_proj.heatmap_head.weight.grad
     report = {
         "batch_size": args.batch_size,
         "image_shape": [480, 640],
@@ -111,6 +115,8 @@ def main() -> None:
             gradient is not None and torch.isfinite(gradient).all()
             for gradient in backbone_gradients
         ),
+        "heatmap_head_has_finite_gradient": heatmap_grad is not None
+        and bool(torch.isfinite(heatmap_grad).all()),
         "raw_backbone_rms": float(feature_map.float().square().mean().sqrt()),
         "visual_token_rms": float(visual_tokens.float().square().mean().sqrt()),
         "visual_token_mean_l2": float(
