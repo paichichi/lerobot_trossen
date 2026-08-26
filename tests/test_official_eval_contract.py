@@ -61,6 +61,14 @@ def test_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
     assert script.count("rollout_command=(") == 1
 
 
+def test_act_launcher_can_override_only_the_runtime_replanning_horizon() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+
+    assert 'n_action_steps_override="${3:-}"' in script
+    assert '--policy.n_action_steps="$n_action_steps_override"' in script
+    assert "n_action_steps_override < 1 || n_action_steps_override > 40" in script
+
+
 def test_rn50_full_alone_uses_a_lightweight_stateless_spike_cap() -> None:
     act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
     v11_script = (REPO_ROOT / "scripts/run_uploaded_v11.sh").read_text()

@@ -3,6 +3,7 @@ set -euo pipefail
 
 model="${1:-ours_rn50}"
 mode="${2:-download}"
+n_action_steps_override="${3:-}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 max_relative_target=0.07
@@ -58,14 +59,20 @@ case "$model" in
     policy_dir_name=rn18
     ;;
   *)
-    echo "usage: $0 {rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50} [--execute]" >&2
+    echo "usage: $0 {rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50} [--execute|download] [n_action_steps]" >&2
     exit 2
     ;;
 esac
 
 if [[ "$mode" != download && "$mode" != --execute ]]; then
-  echo "usage: $0 {rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50} [--execute]" >&2
+  echo "usage: $0 {rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50} [--execute|download] [n_action_steps]" >&2
   exit 2
+fi
+if [[ -n "$n_action_steps_override" ]]; then
+  if [[ ! "$n_action_steps_override" =~ ^[0-9]+$ ]] || (( n_action_steps_override < 1 || n_action_steps_override > 40 )); then
+    echo "n_action_steps must be an integer from 1 to the trained chunk_size of 40." >&2
+    exit 2
+  fi
 fi
 
 run_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -90,6 +97,7 @@ trap finish_run EXIT
   printf 'git_commit=%s\n' "$(git rev-parse HEAD)"
   printf 'policy_repo=%s\n' "$policy_repo"
   printf 'policy_revision=%s\n' "$policy_revision"
+  printf 'n_action_steps_override=%s\n' "${n_action_steps_override:-checkpoint_default}"
   printf 'output_dir=%s\n' "$run_dir"
   printf 'invocation='
   printf '%q ' "$0" "$@"
@@ -133,6 +141,9 @@ else
     'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({k:d.get(k) for k in ("type", "input_features", "output_features", "chunk_size", "n_action_steps")}, indent=2))' \
     "$policy_path/config.json"
 fi
+if [[ -n "$n_action_steps_override" ]]; then
+  echo "Runtime policy override: n_action_steps=$n_action_steps_override"
+fi
 if [[ "$mode" != --execute ]]; then
   echo "Downloaded only. The robot was not connected or moved."
   exit 0
@@ -156,6 +167,9 @@ rollout_command=(
   --display_data=false
   --policy.path="$policy_path"
 )
+if [[ -n "$n_action_steps_override" ]]; then
+  rollout_command+=(--policy.n_action_steps="$n_action_steps_override")
+fi
 printf '%q ' "${rollout_command[@]}" > "$run_dir/resolved_command.txt"
 printf '\n' >> "$run_dir/resolved_command.txt"
 "${rollout_command[@]}"
