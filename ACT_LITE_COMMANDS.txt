@@ -1,11 +1,11 @@
 # Run from ~/lerobot_trossen.
 git fetch origin
-git switch act-rn50-full
-git pull --ff-only origin act-rn50-full
+git switch act-rn50-visual-goal
+git pull --ff-only origin act-rn50-visual-goal
 
 bash scripts/cleanup_trossen_processes.sh
 
-bash scripts/run_uploaded_act.sh rn50_train100_8k
+bash scripts/run_uploaded_act.sh rn50_visual_goal_8k
 
 # Keep the E-stop ready. Ctrl+C once after success, then wait for cleanup.
-bash scripts/run_uploaded_act.sh rn50_train100_8k --execute
+bash scripts/run_uploaded_act.sh rn50_visual_goal_8k --execute
