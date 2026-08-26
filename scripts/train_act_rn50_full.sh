@@ -9,11 +9,11 @@ cd "$repo_root"
 dataset_root="${ACT_DATASET_ROOT:-/home/paichichi/data/act-lite-review/carrot_100_v3}"
 backbone_source_root="${BACKBONE_SOURCE_ROOT:-/home/paichichi/projects/TCC-core}"
 backbone_checkpoint="${BACKBONE_CHECKPOINT:-$repo_root/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt}"
-steps="${ACT_STEPS:-10000}"
+steps="${ACT_STEPS:-8000}"
 batch_size="${ACT_BATCH_SIZE:-16}"
-eval_steps="${ACT_EVAL_STEPS:-1000}"
+eval_steps="${ACT_EVAL_STEPS:-0}"
 save_freq="${ACT_SAVE_FREQ:-1000}"
-eval_split="${ACT_EVAL_SPLIT:-0.2}"
+eval_split="${ACT_EVAL_SPLIT:-0.0}"
 visual_adapter_version="${ACT_VISUAL_ADAPTER_VERSION:-rms_ln_v1}"
 case "$visual_adapter_version" in
   full_adapter_v1|rms_ln_v1) ;;
@@ -22,7 +22,12 @@ case "$visual_adapter_version" in
     exit 2
     ;;
 esac
-run_name="act_rn50_${visual_adapter_version}_carrot_100_train80_val20_${steps}steps"
+if [[ "$eval_split" == "0" || "$eval_split" == "0.0" ]]; then
+  split_name="train100"
+else
+  split_name="evalsplit${eval_split//./p}"
+fi
+run_name="act_rn50_${visual_adapter_version}_carrot_100_${split_name}_${steps}steps"
 output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/$run_name}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
 
@@ -112,20 +117,25 @@ set -o pipefail
   --wandb.enable=false \
   2>&1 | tee "$train_log"
 
-image_swap_dir="$output_dir/image_swap"
-mkdir -p "$image_swap_dir"
-for checkpoint_dir in "$output_dir"/checkpoints/[0-9]*; do
-  [[ -d "$checkpoint_dir/pretrained_model" ]] || continue
-  checkpoint_step="$(basename "$checkpoint_dir")"
-  .venv/bin/python scripts/eval_act_image_swap.py \
-    "$checkpoint_dir/pretrained_model" \
-    --output "$image_swap_dir/$checkpoint_step.json" \
-    --device cuda
-done
+if [[ "$eval_split" == "0" || "$eval_split" == "0.0" ]]; then
+  printf 'All episodes were used for training; final checkpoint: %s\n' \
+    "$output_dir/checkpoints/$(printf '%06d' "$steps")/pretrained_model"
+else
+  image_swap_dir="$output_dir/image_swap"
+  mkdir -p "$image_swap_dir"
+  for checkpoint_dir in "$output_dir"/checkpoints/[0-9]*; do
+    [[ -d "$checkpoint_dir/pretrained_model" ]] || continue
+    checkpoint_step="$(basename "$checkpoint_dir")"
+    .venv/bin/python scripts/eval_act_image_swap.py \
+      "$checkpoint_dir/pretrained_model" \
+      --output "$image_swap_dir/$checkpoint_step.json" \
+      --device cuda
+  done
 
-.venv/bin/python scripts/select_best_act_checkpoint.py \
-  "$output_dir" \
-  --log-path="$train_log" \
-  --image-swap-dir="$image_swap_dir" \
-  --min-paired-ratio=0.50 \
-  --min-main-ratio=0.45
+  .venv/bin/python scripts/select_best_act_checkpoint.py \
+    "$output_dir" \
+    --log-path="$train_log" \
+    --image-swap-dir="$image_swap_dir" \
+    --min-paired-ratio=0.50 \
+    --min-main-ratio=0.45
+fi

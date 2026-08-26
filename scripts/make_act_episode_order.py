@@ -16,8 +16,8 @@ def shuffled_episode_order(
     episode_tasks: list[list[str]], seed: int, eval_split: float = 0.2
 ) -> tuple[list[int], dict[str, tuple[int, int]]]:
     """Shuffle episodes per task and report the exact split used by LeRobot."""
-    if not 0.0 < eval_split < 1.0:
-        raise ValueError(f"eval_split must be between 0 and 1, got {eval_split}")
+    if not 0.0 <= eval_split < 1.0:
+        raise ValueError(f"eval_split must be in [0, 1), got {eval_split}")
     task_to_episodes: dict[str, list[int]] = {}
     for episode_index, tasks in enumerate(episode_tasks):
         task = tasks[0] if tasks else ""

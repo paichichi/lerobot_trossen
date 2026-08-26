@@ -243,6 +243,15 @@ def test_act_split_is_seeded_random_and_stratified_per_task() -> None:
     assert order[100:] != list(range(100, 200))
 
 
+def test_act_split_can_train_on_every_episode() -> None:
+    tasks = [["carrot"]] * 100
+
+    order, counts = shuffled_episode_order(tasks, seed=1000, eval_split=0.0)
+
+    assert sorted(order) == list(range(100))
+    assert counts == {"carrot": (100, 0)}
+
+
 def test_best_act_checkpoint_uses_lowest_saved_validation_loss(tmp_path) -> None:
     output_dir = tmp_path / "run"
     (output_dir / "checkpoints" / "002000" / "pretrained_model").mkdir(parents=True)
