@@ -46,6 +46,7 @@ def main() -> None:
         chunk_size=40,
         n_action_steps=10,
         visual_adapter_version="rms_ln_v1",
+        visual_goal_version="visual_goal_v1",
     )
     policy = ACTRN50FullPolicy(config).cuda().train()
     batch = {
@@ -87,6 +88,7 @@ def main() -> None:
         for parameter in policy.model.backbone.backbone.parameters()
         if parameter.requires_grad
     ]
+    goal_grad = policy.model.visual_goal_query.grad
     report = {
         "batch_size": args.batch_size,
         "image_shape": [480, 640],
@@ -108,6 +110,8 @@ def main() -> None:
             gradient is not None and torch.isfinite(gradient).all()
             for gradient in backbone_gradients
         ),
+        "visual_goal_has_finite_gradient": goal_grad is not None
+        and bool(torch.isfinite(goal_grad).all()),
         "raw_backbone_rms": float(feature_map.float().square().mean().sqrt()),
         "visual_token_rms": float(visual_tokens.float().square().mean().sqrt()),
         "visual_token_mean_l2": float(

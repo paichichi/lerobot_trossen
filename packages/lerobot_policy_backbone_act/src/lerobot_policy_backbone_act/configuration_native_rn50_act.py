@@ -39,6 +39,10 @@ class ACTRN50FullConfig(ACTConfig):
     # RN18's successful checkpoint has visual-token L2 ~= 11.4 for D=512.
     # LayerNorm yields sqrt(512), so a 0.5 gain reproduces that scale.
     visual_token_gain_init: float = 0.5
+    # A visual-only query first summarizes both spatial camera streams. The
+    # robot state is fused only afterwards, so it cannot define the goal by
+    # itself. No labels, pseudo-labels, or cross-episode samples are required.
+    visual_goal_version: str = "none"
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -92,6 +96,8 @@ class ACTRN50FullConfig(ACTConfig):
             raise ValueError("visual_adapter_rms_eps must be positive")
         if self.visual_token_gain_init <= 0:
             raise ValueError("visual_token_gain_init must be positive")
+        if self.visual_goal_version not in {"none", "visual_goal_v1"}:
+            raise ValueError("visual_goal_version must be 'none' or 'visual_goal_v1'")
 
     def get_scheduler_preset(self) -> CosineAnnealingWithWarmupSchedulerConfig:
         return CosineAnnealingWithWarmupSchedulerConfig(

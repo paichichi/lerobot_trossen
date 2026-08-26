@@ -18,6 +18,7 @@ from lerobot_policy_backbone_act.modeling_backbone_act import (
 )
 from lerobot_policy_backbone_act.modeling_native_rn50_act import (
     _ScaleCompatibleVisualTokenAdapter,
+    _VisualGoalACT,
 )
 from torch import nn
 
@@ -137,6 +138,53 @@ def test_full_adapter_v1_uses_official_act_projection_contract() -> None:
     config = ACTRN50FullConfig(visual_adapter_version="full_adapter_v1")
 
     assert config.visual_adapter_version == "full_adapter_v1"
+
+
+def test_visual_goal_config_is_label_free_and_matches_rn18_optimizer_scale() -> None:
+    config = ACTRN50FullConfig(
+        visual_adapter_version="rms_ln_v1",
+        visual_goal_version="visual_goal_v1",
+        optimizer_lr=1e-5,
+        optimizer_lr_backbone=1e-5,
+    )
+
+    assert config.visual_goal_version == "visual_goal_v1"
+    assert config.optimizer_lr == pytest.approx(config.optimizer_lr_backbone)
+
+
+def test_visual_goal_query_changes_when_only_visual_tokens_change() -> None:
+    config = ACTRN50FullConfig(
+        input_features={
+            "observation.state": PolicyFeature(FeatureType.STATE, (7,)),
+            "observation.images.cam_main": PolicyFeature(
+                FeatureType.VISUAL, (3, 32, 32)
+            ),
+            "observation.images.cam_wrist": PolicyFeature(
+                FeatureType.VISUAL, (3, 32, 32)
+            ),
+        },
+        output_features={"action": PolicyFeature(FeatureType.ACTION, (7,))},
+        dim_model=32,
+        n_heads=4,
+        dim_feedforward=64,
+        n_encoder_layers=1,
+        n_decoder_layers=1,
+        n_vae_encoder_layers=1,
+        chunk_size=4,
+        n_action_steps=4,
+        visual_goal_version="visual_goal_v1",
+    )
+    model = _VisualGoalACT(config).eval()
+    first = torch.randn(12, 2, 32)
+    second = first.clone()
+    second[:, 1] += 2.0
+    positions = torch.randn_like(first)
+
+    goal_first = model._encode_visual_goal(first, positions)
+    goal_second = model._encode_visual_goal(second, positions)
+
+    torch.testing.assert_close(goal_first[:, 0], goal_second[:, 0])
+    assert not torch.allclose(goal_first[:, 1], goal_second[:, 1])
 
 
 @pytest.mark.parametrize(

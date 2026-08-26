@@ -15,6 +15,7 @@ eval_steps="${ACT_EVAL_STEPS:-0}"
 save_freq="${ACT_SAVE_FREQ:-1000}"
 eval_split="${ACT_EVAL_SPLIT:-0.0}"
 visual_adapter_version="${ACT_VISUAL_ADAPTER_VERSION:-rms_ln_v1}"
+visual_goal_version="${ACT_VISUAL_GOAL_VERSION:-visual_goal_v1}"
 case "$visual_adapter_version" in
   full_adapter_v1|rms_ln_v1) ;;
   *)
@@ -27,7 +28,7 @@ if [[ "$eval_split" == "0" || "$eval_split" == "0.0" ]]; then
 else
   split_name="evalsplit${eval_split//./p}"
 fi
-run_name="act_rn50_${visual_adapter_version}_carrot_100_${split_name}_${steps}steps"
+run_name="act_rn50_${visual_goal_version}_carrot_100_${split_name}_${steps}steps"
 output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/$run_name}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
 
@@ -79,7 +80,7 @@ set -o pipefail
   --dataset.image_transforms.tfs="$image_transforms" \
   --policy.discover_packages_path=lerobot_policy_backbone_act \
   --policy.type=act_rn50_full \
-  --policy.repo_id="Chipaipai/act-rn50-${visual_adapter_version//_/-}-carrot-100" \
+  --policy.repo_id="Chipaipai/act-rn50-${visual_goal_version//_/-}-carrot-100" \
   --policy.push_to_hub=false \
   --policy.device=cuda \
   --policy.backbone_checkpoint="$backbone_checkpoint" \
@@ -98,13 +99,14 @@ set -o pipefail
   --policy.n_decoder_layers=1 \
   --policy.n_vae_encoder_layers=4 \
   --policy.dropout=0.1 \
-  --policy.optimizer_lr=1e-4 \
-  --policy.optimizer_lr_backbone=1e-6 \
+  --policy.optimizer_lr=1e-5 \
+  --policy.optimizer_lr_backbone=1e-5 \
   --policy.optimizer_weight_decay=1e-4 \
   --policy.scheduler_warmup_steps=1000 \
   --policy.visual_adapter_version="$visual_adapter_version" \
   --policy.visual_adapter_rms_eps=1e-6 \
   --policy.visual_token_gain_init=0.5 \
+  --policy.visual_goal_version="$visual_goal_version" \
   --batch_size="$batch_size" \
   --num_workers=8 \
   --prefetch_factor=4 \
