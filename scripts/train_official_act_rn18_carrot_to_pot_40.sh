@@ -9,6 +9,7 @@ cd "$repo_root"
 steps="${ACT_STEPS:-8000}"
 batch_size="${ACT_BATCH_SIZE:-16}"
 save_freq="${ACT_SAVE_FREQ:-2000}"
+video_backend="${ACT_VIDEO_BACKEND:-pyav}"
 run_name="act_official_rn18_carrot_to_pot_40_train40_${steps}steps"
 output_dir="${ACT_OUTPUT_DIR:-$repo_root/outputs/train/$run_name}"
 train_log="${ACT_TRAIN_LOG:-$output_dir.train.log}"
@@ -45,7 +46,7 @@ set -o pipefail
   --dataset.episodes="$episode_order" \
   --dataset.eval_split=0.0 \
   --dataset.return_uint8=true \
-  --dataset.video_backend=torchcodec \
+  --dataset.video_backend="$video_backend" \
   --dataset.image_transforms.enable=false \
   --policy.type=act \
   --policy.repo_id=Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k \
