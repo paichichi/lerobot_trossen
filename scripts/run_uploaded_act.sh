@@ -4,9 +4,14 @@ set -euo pipefail
 model="${1:-ours_rn50}"
 mode="${2:-download}"
 n_action_steps_override="${3:-}"
+camera_main_serial="${4:-${TROSSEN_CAM_MAIN_SERIAL:-838212073584}}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 max_relative_target=0.07
+policy_prefix=""
+single_main_camera=false
+task_description="Pick up the carrot and place it in the pan"
+usage_models="rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k|rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k|rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50"
 
 case "$model" in
   ours_rn50)
@@ -58,14 +63,34 @@ case "$model" in
     policy_revision=8f3cf3b8358d46928bc12271027787cc1f7b0499
     policy_dir_name=rn18
     ;;
+  rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k)
+    policy_repo=Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k
+    policy_revision=fb23c5b528828d745a8b7bf466bd9bd4465efd08
+    policy_dir_name=act_official_rn18_carrot_to_pot_40
+    policy_step="${model##*_}"
+    policy_step="${policy_step%k}000"
+    policy_prefix="checkpoints/$(printf '%06d' "$policy_step")"
+    single_main_camera=true
+    task_description="Pick up the carrot and place it in the pot"
+    ;;
+  rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k)
+    policy_repo=Chipaipai/act-official-rn50-carrot-to-pot-40-train40-8k
+    policy_revision=fd369e1ef0b8ea5b5cc539c34353c7ae750f117e
+    policy_dir_name=act_official_rn50_carrot_to_pot_40
+    policy_step="${model##*_}"
+    policy_step="${policy_step%k}000"
+    policy_prefix="checkpoints/$(printf '%06d' "$policy_step")"
+    single_main_camera=true
+    task_description="Pick up the carrot and place it in the pot"
+    ;;
   *)
-    echo "usage: $0 {rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50} [--execute|download] [n_action_steps]" >&2
+    echo "usage: $0 {$usage_models} [--execute|download] [n_action_steps] [cam_main_serial]" >&2
     exit 2
     ;;
 esac
 
 if [[ "$mode" != download && "$mode" != --execute ]]; then
-  echo "usage: $0 {rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50} [--execute|download] [n_action_steps]" >&2
+  echo "usage: $0 {$usage_models} [--execute|download] [n_action_steps] [cam_main_serial]" >&2
   exit 2
 fi
 if [[ -n "$n_action_steps_override" ]]; then
@@ -73,6 +98,10 @@ if [[ -n "$n_action_steps_override" ]]; then
     echo "n_action_steps must be an integer from 1 to the trained chunk_size of 40." >&2
     exit 2
   fi
+fi
+if [[ ! "$camera_main_serial" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "cam_main_serial contains unsupported characters: $camera_main_serial" >&2
+  exit 2
 fi
 
 run_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -97,7 +126,10 @@ trap finish_run EXIT
   printf 'git_commit=%s\n' "$(git rev-parse HEAD)"
   printf 'policy_repo=%s\n' "$policy_repo"
   printf 'policy_revision=%s\n' "$policy_revision"
+  printf 'policy_prefix=%s\n' "${policy_prefix:-repository_root}"
   printf 'n_action_steps_override=%s\n' "${n_action_steps_override:-checkpoint_default}"
+  printf 'camera_main_serial=%s\n' "$camera_main_serial"
+  printf 'single_main_camera=%s\n' "$single_main_camera"
   printf 'output_dir=%s\n' "$run_dir"
   printf 'invocation='
   printf '%q ' "$0" "$@"
@@ -108,10 +140,19 @@ exec > >(tee -a "$run_dir/console.log") 2>&1
 echo "All run information will be saved to: $run_dir"
 
 uv sync --extra act
-policy_path="$repo_root/checkpoints/$policy_dir_name"
-uv run --no-sync hf download "$policy_repo" \
-  --revision "$policy_revision" \
-  --local-dir "$policy_path"
+policy_download_root="$repo_root/checkpoints/$policy_dir_name"
+if [[ -n "$policy_prefix" ]]; then
+  uv run --no-sync hf download "$policy_repo" \
+    --revision "$policy_revision" \
+    --include "$policy_prefix/*" \
+    --local-dir "$policy_download_root"
+  policy_path="$policy_download_root/$policy_prefix"
+else
+  policy_path="$policy_download_root"
+  uv run --no-sync hf download "$policy_repo" \
+    --revision "$policy_revision" \
+    --local-dir "$policy_path"
+fi
 
 if [[ "$model" == ours_rn50 || "$model" == rn50_full || "$model" == rn50_full_36k || "$model" == rn50_rms_5k || "$model" == rn50_rms_8k || "$model" == rn50_train100_6k || "$model" == rn50_train100_7k || "$model" == rn50_train100_8k ]]; then
   export BACKBONE_SOURCE_ROOT="${BACKBONE_SOURCE_ROOT:-/home/robotarm/TCC-core}"
@@ -150,6 +191,11 @@ if [[ "$mode" != --execute ]]; then
 fi
 
 echo "Starting physical evaluation: $model. Keep the E-stop ready."
+if [[ "$single_main_camera" == true ]]; then
+  robot_cameras="{cam_main: {type: intelrealsense, serial_number_or_name: \"$camera_main_serial\", width: 640, height: 480, fps: 30}}"
+else
+  robot_cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
+fi
 rollout_command=(
   uv run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen
@@ -159,10 +205,10 @@ rollout_command=(
   --robot.loop_rate=20
   --robot.min_time_to_move_multiplier=2.0
   --robot.max_relative_target="$max_relative_target"
-  --robot.cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
+  --robot.cameras="$robot_cameras"
   --strategy.type=base
   --fps=20
-  --task="Pick up the carrot and place it in the pan"
+  --task="$task_description"
   --return_to_initial_position=true
   --display_data=false
   --policy.path="$policy_path"

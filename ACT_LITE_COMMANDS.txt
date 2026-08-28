@@ -1,10 +1,43 @@
 # Run from ~/lerobot_trossen.
 git fetch origin
-git switch act-rn50-full
-git pull --ff-only origin act-rn50-full
+git switch new-camera-view-version
+git pull --ff-only origin new-camera-view-version
 
 bash scripts/cleanup_trossen_processes.sh
 
+# The new 40-demo policies use one oblique camera named cam_main.
+# Keep this camera in exactly the same position used during data collection.
+# The known cam_main serial is the default. If collection used a different
+# RealSense, replace the value below with that camera's serial number.
+export TROSSEN_CAM_MAIN_SERIAL=838212073584
+
+# RN18 new-camera checkpoints. "download" never connects to or moves the robot.
+bash scripts/run_uploaded_act.sh rn18_newcam_2k download
+bash scripts/run_uploaded_act.sh rn18_newcam_2k --execute
+
+bash scripts/run_uploaded_act.sh rn18_newcam_4k download
+bash scripts/run_uploaded_act.sh rn18_newcam_4k --execute
+
+bash scripts/run_uploaded_act.sh rn18_newcam_6k download
+bash scripts/run_uploaded_act.sh rn18_newcam_6k --execute
+
+bash scripts/run_uploaded_act.sh rn18_newcam_8k download
+bash scripts/run_uploaded_act.sh rn18_newcam_8k --execute
+
+# RN50 new-camera checkpoints.
+bash scripts/run_uploaded_act.sh rn50_newcam_2k download
+bash scripts/run_uploaded_act.sh rn50_newcam_2k --execute
+
+bash scripts/run_uploaded_act.sh rn50_newcam_4k download
+bash scripts/run_uploaded_act.sh rn50_newcam_4k --execute
+
+bash scripts/run_uploaded_act.sh rn50_newcam_6k download
+bash scripts/run_uploaded_act.sh rn50_newcam_6k --execute
+
+bash scripts/run_uploaded_act.sh rn50_newcam_8k download
+bash scripts/run_uploaded_act.sh rn50_newcam_8k --execute
+
+# Previous 100-demo RN50 command retained below.
 # 8K with n_action_steps=5: download and inspect only (does not move the robot).
 bash scripts/run_uploaded_act.sh rn50_train100_8k download 5
 

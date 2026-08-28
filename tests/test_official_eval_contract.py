@@ -69,6 +69,31 @@ def test_act_launcher_can_override_only_the_runtime_replanning_horizon() -> None
     assert "n_action_steps_override < 1 || n_action_steps_override > 40" in script
 
 
+def test_new_camera_hf_checkpoints_are_all_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    for backbone in ("rn18", "rn50"):
+        for step in ("2k", "4k", "6k", "8k"):
+            model = f"{backbone}_newcam_{step}"
+            assert model in script
+            assert f"bash scripts/run_uploaded_act.sh {model} download" in commands
+            assert f"bash scripts/run_uploaded_act.sh {model} --execute" in commands
+
+    assert "Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k" in script
+    assert "Chipaipai/act-official-rn50-carrot-to-pot-40-train40-8k" in script
+    assert 'policy_prefix="checkpoints/' in script
+
+
+def test_new_camera_policies_use_only_the_collected_main_view() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+
+    assert 'camera_main_serial="${4:-${TROSSEN_CAM_MAIN_SERIAL:-838212073584}}"' in script
+    assert "single_main_camera=true" in script
+    assert 'robot_cameras="{cam_main:' in script
+    assert '--robot.cameras="$robot_cameras"' in script
+
+
 def test_rn50_full_alone_uses_a_lightweight_stateless_spike_cap() -> None:
     act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
     v11_script = (REPO_ROOT / "scripts/run_uploaded_v11.sh").read_text()
