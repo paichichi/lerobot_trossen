@@ -69,20 +69,38 @@ def test_act_launcher_can_override_only_the_runtime_replanning_horizon() -> None
     assert "n_action_steps_override < 1 || n_action_steps_override > 40" in script
 
 
-def test_new_camera_hf_checkpoints_are_all_selectable() -> None:
+def test_only_resumable_new_camera_8k_checkpoints_are_selectable() -> None:
     script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
     commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
 
     for backbone in ("rn18", "rn50"):
-        for step in ("2k", "4k", "6k", "8k"):
-            model = f"{backbone}_newcam_{step}"
-            assert model in script
-            assert f"bash scripts/run_uploaded_act.sh {model} download" in commands
-            assert f"bash scripts/run_uploaded_act.sh {model} --execute" in commands
+        model = f"{backbone}_newcam_8k"
+        assert model in script
+        assert f"bash scripts/run_uploaded_act.sh {model} download" in commands
+        assert f"bash scripts/run_uploaded_act.sh {model} --execute" in commands
+        for removed_step in ("2k", "4k", "6k"):
+            assert f"{backbone}_newcam_{removed_step}" not in script
+            assert f"{backbone}_newcam_{removed_step}" not in commands
 
     assert "Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k" in script
     assert "Chipaipai/act-official-rn50-carrot-to-pot-40-train40-8k" in script
-    assert 'policy_prefix="checkpoints/' in script
+    assert "policy_prefix=checkpoints/008000/pretrained_model" in script
+    assert "127e0b2fa899d4de090d7d375689bc7a963ef8d3" in script
+    assert "81fa0312ac94fa66704c02a7aa80a2ece57e8fc8" in script
+
+
+def test_new_camera_resume_commands_target_total_10k() -> None:
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+    resume_script = (
+        REPO_ROOT / "scripts/resume_new_camera_act_from_hf.sh"
+    ).read_text()
+
+    assert "resume_new_camera_act_from_hf.sh rn18 10000" in commands
+    assert "resume_new_camera_act_from_hf.sh rn50 10000" in commands
+    assert '--resume=true' in resume_script
+    assert '--steps="$total_steps"' in resume_script
+    assert '--dataset.root="$dataset_root"' in resume_script
+    assert '--output_dir="$output_dir"' in resume_script
 
 
 def test_new_camera_policies_use_only_the_collected_main_view() -> None:

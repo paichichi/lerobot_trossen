@@ -11,7 +11,7 @@ max_relative_target=0.07
 policy_prefix=""
 single_main_camera=false
 task_description="Pick up the carrot and place it in the pan"
-usage_models="rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k|rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k|rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50"
+usage_models="rn18_newcam_8k|rn50_newcam_8k|rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50"
 
 case "$model" in
   ours_rn50)
@@ -63,23 +63,19 @@ case "$model" in
     policy_revision=8f3cf3b8358d46928bc12271027787cc1f7b0499
     policy_dir_name=rn18
     ;;
-  rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k)
+  rn18_newcam_8k)
     policy_repo=Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k
-    policy_revision=fb23c5b528828d745a8b7bf466bd9bd4465efd08
+    policy_revision=127e0b2fa899d4de090d7d375689bc7a963ef8d3
     policy_dir_name=act_official_rn18_carrot_to_pot_40
-    policy_step="${model##*_}"
-    policy_step="${policy_step%k}000"
-    policy_prefix="checkpoints/$(printf '%06d' "$policy_step")"
+    policy_prefix=checkpoints/008000/pretrained_model
     single_main_camera=true
     task_description="Pick up the carrot and place it in the pot"
     ;;
-  rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k)
+  rn50_newcam_8k)
     policy_repo=Chipaipai/act-official-rn50-carrot-to-pot-40-train40-8k
-    policy_revision=fd369e1ef0b8ea5b5cc539c34353c7ae750f117e
+    policy_revision=81fa0312ac94fa66704c02a7aa80a2ece57e8fc8
     policy_dir_name=act_official_rn50_carrot_to_pot_40
-    policy_step="${model##*_}"
-    policy_step="${policy_step%k}000"
-    policy_prefix="checkpoints/$(printf '%06d' "$policy_step")"
+    policy_prefix=checkpoints/008000/pretrained_model
     single_main_camera=true
     task_description="Pick up the carrot and place it in the pot"
     ;;
