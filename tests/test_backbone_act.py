@@ -15,6 +15,7 @@ from lerobot_policy_backbone_act.modeling_backbone_act import (
     BackboneACTPolicy,
     _BackboneSpatialEncoder,
     _load_upstream_backbone,
+    _ViTPatchSpatialEncoder,
 )
 from lerobot_policy_backbone_act.modeling_native_rn50_act import (
     _ScaleCompatibleVisualTokenAdapter,
@@ -32,6 +33,22 @@ class _BackboneWithBatchNorm(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.batch_norm = nn.BatchNorm2d(3)
+
+
+class _FakeViTModel(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv_proj = nn.Conv2d(3, 768, kernel_size=16, stride=16)
+        self.class_token = nn.Parameter(torch.zeros(1, 1, 768))
+        self.encoder = nn.Identity()
+
+
+class _FakeViTBackbone(nn.Module):
+    output_dim = 768
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = _FakeViTModel()
 
 
 def _encoder_config(*, frozen: bool = True) -> SimpleNamespace:
@@ -208,9 +225,25 @@ def test_frozen_backbone_stays_in_eval_mode_when_policy_trains() -> None:
     assert not backbone.batch_norm.training
 
 
-def test_lite_release_rejects_vit_until_spatial_adapter_exists() -> None:
-    with pytest.raises(ValueError, match="ViT requires"):
-        BackboneACTConfig(backbone_family="ours_vit")
+def test_backbone_act_accepts_fixed_resolution_ours_vit() -> None:
+    config = BackboneACTConfig(backbone_family="ours_vit")
+
+    assert config.backbone_image_size == 224
+    with pytest.raises(ValueError, match="fixed 224x224"):
+        BackboneACTConfig(backbone_family="ours_vit", backbone_image_size=384)
+
+
+def test_ours_vit_exposes_spatial_patch_tokens_without_cls() -> None:
+    encoder = _ViTPatchSpatialEncoder(
+        _FakeViTBackbone(), _encoder_config(frozen=False)
+    )
+    images = torch.randn(2, 3, 224, 224)
+
+    feature_map = encoder(images)["feature_map"]
+
+    assert feature_map.shape == (2, 768, 14, 14)
+    expected = encoder.backbone.model.conv_proj(encoder.preprocess(images))
+    torch.testing.assert_close(feature_map, expected)
 
 
 def test_deployment_environment_overrides_serialized_training_paths(

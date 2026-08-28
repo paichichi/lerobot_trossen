@@ -32,21 +32,28 @@ class BackboneACTConfig(ACTConfig):
         }
     )
 
-    # Upstream ACT uses this only to allocate its 2048-channel image projection.
+    # Upstream ACT uses this only to bootstrap its image modules. The policy
+    # replaces both the backbone and projection for ours_vit after construction.
     vision_backbone: str = "resnet50"
     pretrained_backbone_weights: str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.backbone_family != "ours_rn50":
+        if self.backbone_family not in {"ours_rn50", "ours_vit"}:
             raise ValueError(
-                "The first backbone_act lite release supports ours_rn50 only; "
-                "ViT requires a 768-channel patch-token spatial adapter"
+                "backbone_family must be one of {'ours_rn50', 'ours_vit'}"
             )
         if self.vision_backbone != "resnet50":
-            raise ValueError("ours_rn50 must use ACT's ResNet50-shaped projection")
+            raise ValueError(
+                "backbone_act uses vision_backbone='resnet50' while bootstrapping "
+                "the official ACT image modules"
+            )
         if self.backbone_image_size <= 0:
             raise ValueError("backbone_image_size must be positive")
+        if self.backbone_family == "ours_vit" and self.backbone_image_size != 224:
+            raise ValueError(
+                "ours_vit is a ViT-B/16 checkpoint with a fixed 224x224 positional embedding"
+            )
         if len(self.backbone_image_mean) != 3 or len(self.backbone_image_std) != 3:
             raise ValueError("Backbone image mean/std must contain three RGB values")
         if any(value <= 0 for value in self.backbone_image_std):

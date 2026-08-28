@@ -51,9 +51,16 @@ def _load_upstream_backbone(config: BackboneACTConfig) -> nn.Module:
 
     args = _checkpoint_args(checkpoint)
     backbone_name = str(args.get("backbone", ""))
-    if "resnet50" not in backbone_name and "r3m" not in backbone_name:
+    is_rn50 = "resnet50" in backbone_name or "r3m" in backbone_name
+    is_vit = backbone_name in {"vit", "vit_b16"}
+    if config.backbone_family == "ours_rn50" and not is_rn50:
         raise ValueError(
             "backbone_act ours_rn50 requires an RN50-family checkpoint; "
+            f"checkpoint declares {backbone_name!r}"
+        )
+    if config.backbone_family == "ours_vit" and not is_vit:
+        raise ValueError(
+            "backbone_act ours_vit requires a ViT-B/16 checkpoint; "
             f"checkpoint declares {backbone_name!r}"
         )
 
@@ -78,8 +85,12 @@ def _load_upstream_backbone(config: BackboneACTConfig) -> nn.Module:
             f"missing={missing[:20]}, unexpected={unexpected[:20]}"
         )
 
-    if int(getattr(backbone, "output_dim", -1)) != 2048:
-        raise ValueError("backbone_act ours_rn50 must expose 2048 channels")
+    expected_output_dim = 768 if config.backbone_family == "ours_vit" else 2048
+    if int(getattr(backbone, "output_dim", -1)) != expected_output_dim:
+        raise ValueError(
+            f"backbone_act {config.backbone_family} must expose "
+            f"{expected_output_dim} channels"
+        )
     for parameter in backbone.parameters():
         parameter.requires_grad_(not config.freeze_vision_backbone)
     return backbone
@@ -161,6 +172,45 @@ class _BackboneSpatialEncoder(nn.Module):
         return {"feature_map": feature_map}
 
 
+class _ViTPatchSpatialEncoder(_BackboneSpatialEncoder):
+    """Expose the TCC ViT-B/16 patch tokens as a 14x14 ACT feature map."""
+
+    def forward(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
+        images = self.preprocess(images)
+        model = getattr(self.backbone, "model", None)
+        if model is None or not all(
+            hasattr(model, attribute)
+            for attribute in ("conv_proj", "class_token", "encoder")
+        ):
+            raise TypeError(
+                "ours_vit must expose the torchvision ViT model as backbone.model"
+            )
+
+        patch_grid = model.conv_proj(images)
+        batch_size, channels, grid_height, grid_width = patch_grid.shape
+        if channels != 768:
+            raise RuntimeError(
+                f"Expected 768-channel ViT patch embeddings, got {channels}"
+            )
+        patch_tokens = patch_grid.flatten(2).transpose(1, 2)
+        class_token = model.class_token.expand(batch_size, -1, -1)
+        encoded_tokens = model.encoder(torch.cat([class_token, patch_tokens], dim=1))
+        patch_tokens = encoded_tokens[:, 1:]
+        expected_tokens = grid_height * grid_width
+        if patch_tokens.shape != (batch_size, expected_tokens, channels):
+            raise RuntimeError(
+                "Unexpected ViT patch token shape: "
+                f"got {tuple(patch_tokens.shape)}, expected "
+                f"{(batch_size, expected_tokens, channels)}"
+            )
+        feature_map = (
+            patch_tokens.transpose(1, 2)
+            .reshape(batch_size, channels, grid_height, grid_width)
+            .contiguous()
+        )
+        return {"feature_map": feature_map}
+
+
 class BackboneACTPolicy(ACTPolicy):
     """Official ACT with only its visual feature extractor replaced."""
 
@@ -171,6 +221,11 @@ class BackboneACTPolicy(ACTPolicy):
         # Official ACT constructs its CVAE, Transformer, action objective, queue,
         # and a ResNet50-shaped image projection before this replacement.
         super().__init__(config, **kwargs)
-        self.model.backbone = _BackboneSpatialEncoder(
-            _load_upstream_backbone(config), config
-        )
+        backbone = _load_upstream_backbone(config)
+        if config.backbone_family == "ours_vit":
+            self.model.backbone = _ViTPatchSpatialEncoder(backbone, config)
+            self.model.encoder_img_feat_input_proj = nn.Conv2d(
+                768, config.dim_model, kernel_size=1
+            )
+        else:
+            self.model.backbone = _BackboneSpatialEncoder(backbone, config)
