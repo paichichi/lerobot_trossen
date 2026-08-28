@@ -18,10 +18,6 @@ SHARED_DRIVER_ARGUMENTS = (
     "--robot.min_time_to_move_multiplier=2.0",
     "--robot.max_relative_target=",
     "--robot.cameras=",
-    "cam_main: {type: intelrealsense",
-    'serial_number_or_name: "838212073584"',
-    "cam_wrist: {type: intelrealsense",
-    'serial_number_or_name: "409122274608"',
     "--strategy.type=base",
     "--fps=20",
     "--return_to_initial_position=true",
@@ -52,12 +48,12 @@ def test_act_and_mlp_launchers_share_one_official_driver_contract() -> None:
         assert all(custom_argument not in script for script in scripts), custom_argument
 
 
-def test_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
+def test_c920_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
     script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
 
-    assert 'model="${1:-ours_rn50}"' in script
-    assert "ours_rn50)" in script
-    assert "rn18)" in script
+    assert 'model="${1:-rn50_newcam_8k}"' in script
+    assert "rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k)" in script
+    assert "rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k)" in script
     assert script.count("rollout_command=(") == 1
 
 
@@ -88,33 +84,46 @@ def test_new_camera_hf_checkpoints_are_all_selectable() -> None:
 def test_new_camera_policies_use_only_the_collected_main_view() -> None:
     script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
 
-    assert 'camera_main_serial="${4:-${TROSSEN_CAM_MAIN_SERIAL:-838212073584}}"' in script
-    assert "single_main_camera=true" in script
+    assert "TROSSEN_C920_PATH" in script
+    assert "/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920-video-index0" in script
     assert 'robot_cameras="{cam_main:' in script
+    assert "type: opencv" in script
+    assert "index_or_path:" in script
+    assert "fps: 20" in script
+    assert "fourcc: MJPG" in script
+    assert "scripts/lock_c920_focus.py" in script
     assert '--robot.cameras="$robot_cameras"' in script
+    for removed_camera_setting in (
+        "intelrealsense",
+        "RealSense",
+        "cam_wrist",
+        "serial_number_or_name",
+        "838212073584",
+        "409122274608",
+    ):
+        assert removed_camera_setting not in script
 
 
-def test_rn50_full_alone_uses_a_lightweight_stateless_spike_cap() -> None:
+def test_c920_launcher_keeps_the_official_safety_cap() -> None:
     act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
-    v11_script = (REPO_ROOT / "scripts/run_uploaded_v11.sh").read_text()
 
     assert "max_relative_target=0.07" in act_script
-    assert "max_relative_target=0.06" in act_script
+    assert "max_relative_target=0.06" not in act_script
     assert '--robot.max_relative_target="$max_relative_target"' in act_script
     assert "arm_max_velocity" not in act_script
-    assert "max_relative_target=0.06" not in v11_script
 
 
-def test_launchers_pin_end_to_end_rn50_checkpoints() -> None:
+def test_act_launcher_does_not_offer_legacy_policy_variants() -> None:
     act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
-    v11_script = (REPO_ROOT / "scripts/run_uploaded_v11.sh").read_text()
 
-    assert "Chipaipai/act-ours-rn50-end-to-end-carrot-100" in act_script
-    assert "5f0fd733e9098ba2e4c7143d44ada99087e0ae7d" in act_script
-    assert "act-lite-ours-rn50-carrot-100" not in act_script
-    assert "policies_v11_end_to_end_rn50/ours_rn50/checkpoint_100000.pt" in v11_script
-    assert "56690ddea1023ebe840c2d0dd1a07cfad67377b0" in v11_script
-    assert "policies_v11_basic_chunked_mlp" not in v11_script
+    for legacy_variant in (
+        "ours_rn50",
+        "rn50_full",
+        "rn50_rms",
+        "rn50_train100",
+        "act-ours-rn50-end-to-end-carrot-100",
+    ):
+        assert legacy_variant not in act_script
 
 
 def test_base_rollouts_do_not_create_evaluation_datasets() -> None:

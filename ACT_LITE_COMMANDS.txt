@@ -5,11 +5,10 @@ git pull --ff-only origin new-camera-view-version
 
 bash scripts/cleanup_trossen_processes.sh
 
-# The new 40-demo policies use one oblique camera named cam_main.
-# Keep this camera in exactly the same position used during data collection.
-# The known cam_main serial is the default. If collection used a different
-# RealSense, replace the value below with that camera's serial number.
-export TROSSEN_CAM_MAIN_SERIAL=838212073584
+# The new 40-demo policies use only the C920 named cam_main.
+# Keep it in exactly the same position used during data collection. Use the
+# stable by-id path so Linux /dev/video numbers cannot silently select another camera.
+export TROSSEN_C920_PATH=/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920-video-index0
 
 # RN18 new-camera checkpoints. "download" never connects to or moves the robot.
 bash scripts/run_uploaded_act.sh rn18_newcam_2k download
@@ -36,10 +35,3 @@ bash scripts/run_uploaded_act.sh rn50_newcam_6k --execute
 
 bash scripts/run_uploaded_act.sh rn50_newcam_8k download
 bash scripts/run_uploaded_act.sh rn50_newcam_8k --execute
-
-# Previous 100-demo RN50 command retained below.
-# 8K with n_action_steps=5: download and inspect only (does not move the robot).
-bash scripts/run_uploaded_act.sh rn50_train100_8k download 5
-
-# 8K with n_action_steps=5: physical evaluation. Keep the E-stop ready.
-bash scripts/run_uploaded_act.sh rn50_train100_8k --execute 5

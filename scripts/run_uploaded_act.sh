@@ -1,68 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-model="${1:-ours_rn50}"
+model="${1:-rn50_newcam_8k}"
 mode="${2:-download}"
 n_action_steps_override="${3:-}"
-camera_main_serial="${4:-${TROSSEN_CAM_MAIN_SERIAL:-838212073584}}"
+c920_path="${4:-${TROSSEN_C920_PATH:-/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920-video-index0}}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 max_relative_target=0.07
 policy_prefix=""
-single_main_camera=false
-task_description="Pick up the carrot and place it in the pan"
-usage_models="rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k|rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k|rn50_train100_6k|rn50_train100_7k|rn50_train100_8k|rn50_rms_5k|rn50_rms_8k|rn18|rn50_full|rn50_full_36k|ours_rn50"
+task_description="Pick up the carrot and place it in the pot"
+usage_models="rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k|rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k"
 
 case "$model" in
-  ours_rn50)
-    policy_repo=Chipaipai/act-ours-rn50-end-to-end-carrot-100
-    policy_revision=5f0fd733e9098ba2e4c7143d44ada99087e0ae7d
-    policy_dir_name=ours_rn50_end_to_end
-    ;;
-  rn50_full)
-    policy_repo=Chipaipai/act-rn50-full-carrot-100
-    policy_revision=f599bba7e80f22a513f98a8579dae6cbf44ca627
-    policy_dir_name=act_rn50_full_6k
-    # Stateless spike limiting only: preserve the ACT target sequence and
-    # avoid the lag introduced by velocity/acceleration filters.
-    max_relative_target=0.06
-    ;;
-  rn50_full_36k)
-    policy_repo=Chipaipai/act-rn50-full-carrot-100
-    policy_revision=e9fb5faf5dcd5ea75112e736997dd98bdba9833a
-    policy_dir_name=act_rn50_full_36k
-    max_relative_target=0.06
-    ;;
-  rn50_rms_5k)
-    policy_repo=Chipaipai/act-rn50-rms-ln-v1-carrot-100-5k
-    policy_revision=7b2b73c574435301f37f87c443123549743c68bd
-    policy_dir_name=act_rn50_rms_ln_v1_5k
-    ;;
-  rn50_rms_8k)
-    policy_repo=Chipaipai/act-rn50-rms-ln-v1-carrot-100-8k
-    policy_revision=a892129e578f3e86c51b1654644cde201898802a
-    policy_dir_name=act_rn50_rms_ln_v1_8k
-    ;;
-  rn50_train100_8k)
-    policy_repo=Chipaipai/act-rn50-rms-ln-v1-carrot-100-train100-8k
-    policy_revision=b614602e3fdf004450a4072a17b0ade3653e32f8
-    policy_dir_name=act_rn50_rms_ln_v1_train100_8k
-    ;;
-  rn50_train100_7k)
-    policy_repo=Chipaipai/act-rn50-rms-ln-v1-carrot-100-train100-7k
-    policy_revision=6ea13bbb38a7fd7e3f94cdc2f1c0f100eac64d1f
-    policy_dir_name=act_rn50_rms_ln_v1_train100_7k
-    ;;
-  rn50_train100_6k)
-    policy_repo=Chipaipai/act-rn50-rms-ln-v1-carrot-100-train100-6k
-    policy_revision=fe1ecef8740f89f1c58a14897bad377ce9063ee6
-    policy_dir_name=act_rn50_rms_ln_v1_train100_6k
-    ;;
-  rn18)
-    policy_repo=Chipaipai/act-official-rn18-carrot-100
-    policy_revision=8f3cf3b8358d46928bc12271027787cc1f7b0499
-    policy_dir_name=rn18
-    ;;
   rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k)
     policy_repo=Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k
     policy_revision=fb23c5b528828d745a8b7bf466bd9bd4465efd08
@@ -70,8 +20,6 @@ case "$model" in
     policy_step="${model##*_}"
     policy_step="${policy_step%k}000"
     policy_prefix="checkpoints/$(printf '%06d' "$policy_step")"
-    single_main_camera=true
-    task_description="Pick up the carrot and place it in the pot"
     ;;
   rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k)
     policy_repo=Chipaipai/act-official-rn50-carrot-to-pot-40-train40-8k
@@ -80,17 +28,15 @@ case "$model" in
     policy_step="${model##*_}"
     policy_step="${policy_step%k}000"
     policy_prefix="checkpoints/$(printf '%06d' "$policy_step")"
-    single_main_camera=true
-    task_description="Pick up the carrot and place it in the pot"
     ;;
   *)
-    echo "usage: $0 {$usage_models} [--execute|download] [n_action_steps] [cam_main_serial]" >&2
+    echo "usage: $0 {$usage_models} [--execute|download] [n_action_steps] [c920_path]" >&2
     exit 2
     ;;
 esac
 
 if [[ "$mode" != download && "$mode" != --execute ]]; then
-  echo "usage: $0 {$usage_models} [--execute|download] [n_action_steps] [cam_main_serial]" >&2
+  echo "usage: $0 {$usage_models} [--execute|download] [n_action_steps] [c920_path]" >&2
   exit 2
 fi
 if [[ -n "$n_action_steps_override" ]]; then
@@ -99,8 +45,8 @@ if [[ -n "$n_action_steps_override" ]]; then
     exit 2
   fi
 fi
-if [[ ! "$camera_main_serial" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "cam_main_serial contains unsupported characters: $camera_main_serial" >&2
+if [[ ! "$c920_path" =~ ^/dev/v4l/by-id/[A-Za-z0-9._-]+$ ]]; then
+  echo "c920_path must be a stable /dev/v4l/by-id device path: $c920_path" >&2
   exit 2
 fi
 
@@ -128,8 +74,8 @@ trap finish_run EXIT
   printf 'policy_revision=%s\n' "$policy_revision"
   printf 'policy_prefix=%s\n' "${policy_prefix:-repository_root}"
   printf 'n_action_steps_override=%s\n' "${n_action_steps_override:-checkpoint_default}"
-  printf 'camera_main_serial=%s\n' "$camera_main_serial"
-  printf 'single_main_camera=%s\n' "$single_main_camera"
+  printf 'c920_path=%s\n' "$c920_path"
+  printf 'camera_mode=c920_only\n'
   printf 'output_dir=%s\n' "$run_dir"
   printf 'invocation='
   printf '%q ' "$0" "$@"
@@ -154,23 +100,7 @@ else
     --local-dir "$policy_path"
 fi
 
-if [[ "$model" == ours_rn50 || "$model" == rn50_full || "$model" == rn50_full_36k || "$model" == rn50_rms_5k || "$model" == rn50_rms_8k || "$model" == rn50_train100_6k || "$model" == rn50_train100_7k || "$model" == rn50_train100_8k ]]; then
-  export BACKBONE_SOURCE_ROOT="${BACKBONE_SOURCE_ROOT:-/home/robotarm/TCC-core}"
-  export BACKBONE_CHECKPOINT="$repo_root/assets/tcc-policy-assets/backbones/ours_rn50/checkpoint_040000.pt"
-  uv run --no-sync hf download Chipaipai/tcc-core-real-robot-policies \
-    backbones/ours_rn50/checkpoint_040000.pt \
-    --revision 466bc1e4be7d1899da7281a5d8a30add04bf7e3c \
-    --local-dir="$repo_root/assets/tcc-policy-assets"
-  if [[ "$mode" == --execute && ! -f "$BACKBONE_SOURCE_ROOT/xirl/models.py" ]]; then
-    echo "TCC source missing: $BACKBONE_SOURCE_ROOT/xirl/models.py" >&2
-    exit 1
-  fi
-fi
-
 sha256sum "$policy_path/model.safetensors" > "$run_dir/weights.sha256"
-if [[ "$model" == ours_rn50 || "$model" == rn50_full || "$model" == rn50_full_36k || "$model" == rn50_rms_5k || "$model" == rn50_rms_8k || "$model" == rn50_train100_6k || "$model" == rn50_train100_7k || "$model" == rn50_train100_8k ]]; then
-  sha256sum "$BACKBONE_CHECKPOINT" >> "$run_dir/weights.sha256"
-fi
 
 if [[ -f "$policy_path/first_frame_report.json" ]]; then
   cp "$policy_path/first_frame_report.json" "$run_dir/first_frame_report.json"
@@ -191,11 +121,12 @@ if [[ "$mode" != --execute ]]; then
 fi
 
 echo "Starting physical evaluation: $model. Keep the E-stop ready."
-if [[ "$single_main_camera" == true ]]; then
-  robot_cameras="{cam_main: {type: intelrealsense, serial_number_or_name: \"$camera_main_serial\", width: 640, height: 480, fps: 30}}"
-else
-  robot_cameras='{cam_main: {type: intelrealsense, serial_number_or_name: "838212073584", width: 640, height: 480, fps: 30}, cam_wrist: {type: intelrealsense, serial_number_or_name: "409122274608", width: 640, height: 480, fps: 30}}'
+if [[ ! -e "$c920_path" ]]; then
+  echo "C920 device is unavailable: $c920_path" >&2
+  exit 1
 fi
+uv run --no-sync python scripts/lock_c920_focus.py
+robot_cameras="{cam_main: {type: opencv, index_or_path: \"$c920_path\", width: 640, height: 480, fps: 20, fourcc: MJPG}}"
 rollout_command=(
   uv run --no-sync lerobot-rollout
   --robot.discover_packages_path=lerobot_robot_trossen

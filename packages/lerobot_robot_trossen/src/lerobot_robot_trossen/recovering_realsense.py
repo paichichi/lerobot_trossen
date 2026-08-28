@@ -6,16 +6,79 @@ implementation predates upstream reconnect, hardware-reset, and teardown fixes.
 
 from __future__ import annotations
 
+import fcntl
 import logging
+import os
+import struct
 import time
 from typing import Any
 
+from lerobot.cameras.opencv.camera_opencv import OpenCVCamera
 from lerobot.cameras.realsense import camera_realsense
 from lerobot.cameras.realsense.camera_realsense import RealSenseCamera
 from lerobot.cameras.utils import make_cameras_from_configs
 from lerobot.utils.errors import DeviceNotConnectedError
 
 logger = logging.getLogger(__name__)
+
+
+_C920_DEVICE_MARKER = "usb-046d_HD_Pro_Webcam_C920-video-index0"
+
+
+class StableC920Camera(OpenCVCamera):
+    """OpenCV C920 with focus, exposure, and white balance locked after opening."""
+
+    _VIDIOC_G_CTRL = 0xC008561B
+    _VIDIOC_S_CTRL = 0xC008561C
+    _CONTROLS = (
+        ("autofocus", 0x009A090C, 0),
+        ("focus", 0x009A090A, 19),
+        # V4L2 exposure_auto uses 1 for manual and 3 for aperture-priority auto.
+        ("auto_exposure", 0x009A0901, 1),
+        ("exposure", 0x009A0902, 39),
+        ("auto_white_balance", 0x0098090C, 0),
+        ("white_balance_temperature", 0x0098091A, 3994),
+        ("zoom", 0x009A090D, 100),
+    )
+
+    def _configure_capture_settings(self) -> None:
+        # The stock settings open the device and validate format/FPS/resolution first.
+        # Applying UVC controls here happens before the background capture thread starts,
+        # so OpenCV cannot race a property update against frame reads.
+        super()._configure_capture_settings()
+        device = str(self.index_or_path)
+        fd = os.open(device, os.O_RDWR | os.O_NONBLOCK)
+        try:
+            for _, control_id, requested in self._CONTROLS:
+                fcntl.ioctl(
+                    fd,
+                    self._VIDIOC_S_CTRL,
+                    struct.pack("Ii", control_id, requested),
+                )
+
+            readback: dict[str, int] = {}
+            mismatched: list[str] = []
+            for name, control_id, requested in self._CONTROLS:
+                result = fcntl.ioctl(
+                    fd,
+                    self._VIDIOC_G_CTRL,
+                    struct.pack("Ii", control_id, 0),
+                )
+                actual = struct.unpack("Ii", result)[1]
+                readback[name] = actual
+                if actual != requested:
+                    mismatched.append(f"{name}={actual} (wanted {requested})")
+        finally:
+            os.close(fd)
+
+        if mismatched:
+            raise RuntimeError(f"Failed to lock C920 controls: {', '.join(mismatched)}")
+
+        logger.info(
+            "Locked C920 controls: autofocus=%d focus=%d auto_exposure=%d "
+            "exposure=%d auto_white_balance=%d white_balance_temperature=%d zoom=%d",
+            *(readback[name] for name, _, _ in self._CONTROLS),
+        )
 
 
 class RecoveringRealSenseCamera(RealSenseCamera):
@@ -123,6 +186,8 @@ def make_trossen_cameras_from_configs(
     for key, config in camera_configs.items():
         if config.type == "intelrealsense":
             cameras[key] = RecoveringRealSenseCamera(config)
+        elif config.type == "opencv" and _C920_DEVICE_MARKER in str(config.index_or_path):
+            cameras[key] = StableC920Camera(config)
         else:
             cameras.update(make_cameras_from_configs({key: config}))
     return cameras
