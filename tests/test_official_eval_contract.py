@@ -15,7 +15,6 @@ SHARED_DRIVER_ARGUMENTS = (
     "--robot.ip_address=192.168.1.4",
     "--robot.id=follower",
     "--robot.loop_rate=20",
-    "--robot.min_time_to_move_multiplier=2.0",
     "--robot.max_relative_target=",
     "--robot.cameras=",
     "--strategy.type=base",
@@ -53,16 +52,31 @@ def test_c920_rn18_and_rn50_share_the_same_act_rollout_command() -> None:
 
     assert 'model="${1:-rn50_newcam_8k}"' in script
     assert "rn18_newcam_2k|rn18_newcam_4k|rn18_newcam_6k|rn18_newcam_8k)" in script
-    assert "rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k)" in script
+    assert (
+        "rn50_newcam_2k|rn50_newcam_4k|rn50_newcam_6k|rn50_newcam_8k|"
+        "rn50_newcam_9k|rn50_newcam_10k)"
+    ) in script
     assert script.count("rollout_command=(") == 1
 
 
-def test_act_launcher_can_override_only_the_runtime_replanning_horizon() -> None:
+def test_act_launcher_supports_an_explicit_replanning_override() -> None:
     script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
 
     assert 'n_action_steps_override="${3:-}"' in script
-    assert '--policy.n_action_steps="$n_action_steps_override"' in script
-    assert "n_action_steps_override < 1 || n_action_steps_override > 40" in script
+    assert 'rollout_command+=(--policy.n_action_steps="$n_action_steps_override")' in script
+    assert 'n_action_steps must be an integer from 1 to the trained chunk_size of 40.' in script
+    assert '${n_action_steps_override:-checkpoint_default}' in script
+
+
+def test_act_launcher_only_creates_run_logs_for_execute_mode() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    execute_logging = script.index('if [[ "$mode" == --execute ]]; then')
+    download = script.index("uv sync --extra act")
+
+    assert execute_logging < script.index('mkdir -p "$run_dir"') < download
+    assert execute_logging < script.index('tee -a "$run_dir/console.log"') < download
+    assert 'run_dir=""' in script
+    assert 'if [[ "$mode" == --execute ]]; then\n  sha256sum' in script
 
 
 def test_new_camera_hf_checkpoints_are_all_selectable() -> None:
@@ -76,9 +90,142 @@ def test_new_camera_hf_checkpoints_are_all_selectable() -> None:
             assert f"bash scripts/run_uploaded_act.sh {model} download" in commands
             assert f"bash scripts/run_uploaded_act.sh {model} --execute" in commands
 
+    for step in ("9k", "10k"):
+        model = f"rn50_newcam_{step}"
+        assert model in script
+        assert f"bash scripts/run_uploaded_act.sh {model} download" in commands
+        assert f"bash scripts/run_uploaded_act.sh {model} --execute" in commands
+
+    assert 'if [[ -f "$policy_path/model.safetensors" ]]' in script
+    assert 'echo "Using local checkpoint: $policy_path"' in script
+
     assert "Chipaipai/act-official-rn18-carrot-to-pot-40-train40-8k" in script
     assert "Chipaipai/act-official-rn50-carrot-to-pot-40-train40-8k" in script
     assert 'policy_prefix="checkpoints/' in script
+
+
+def test_spatial_rn50_8k_local_checkpoint_is_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "rn50_spatial_8k" in script
+    assert "act_official_rn50_carrot_to_pot_40_spatial_lr1e6_train40_8000steps" in script
+    assert 'policy_path_override="$repo_root/outputs/train/' in script
+    assert 'if [[ -n "$policy_path_override" ]]' in script
+    assert "bash scripts/run_uploaded_act.sh rn50_spatial_8k download" in commands
+    assert "bash scripts/run_uploaded_act.sh rn50_spatial_8k --execute" in commands
+
+
+def test_color_rn50_8k_local_checkpoint_is_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "rn50_color_2k|rn50_color_4k|rn50_color_6k|rn50_color_8k" in script
+    assert "act_official_rn50_carrot_to_pot_40_color_lr1e6_train40_8000steps" in script
+    assert "bash scripts/run_uploaded_act.sh rn50_color_6k download" in commands
+    assert "bash scripts/run_uploaded_act.sh rn50_color_6k --execute" in commands
+    assert "bash scripts/run_uploaded_act.sh rn50_color_8k download" in commands
+    assert "bash scripts/run_uploaded_act.sh rn50_color_8k --execute" in commands
+
+
+def test_color3_rn50_local_checkpoints_are_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "rn50_color3_4k|rn50_color3_5k|rn50_color3_6k|rn50_color3_7k|rn50_color3_8k" in script
+    assert "act_official_rn50_carrot_to_pot_40_color3_lr1e6_train40_8000steps" in script
+    for step in range(4, 9):
+        assert f"bash scripts/run_uploaded_act.sh rn50_color3_{step}k download" in commands
+        assert f"bash scripts/run_uploaded_act.sh rn50_color3_{step}k --execute" in commands
+
+
+def test_ours_vit_local_checkpoints_and_upstream_constructor_are_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "vit_ours_2k|vit_ours_4k|vit_ours_6k|vit_ours_8k" in script
+    assert "act_ours_vit_carrot_to_pot_40_color3_frozen_train40_8000steps" in script
+    assert "assets/tcc-policy-assets/backbones/ours_vit/checkpoint_040000.pt" in script
+    assert "backbone_source_root_override=/home/robotarm/TCC-core" in script
+    assert 'export BACKBONE_CHECKPOINT="$backbone_checkpoint_override"' in script
+    assert 'export BACKBONE_SOURCE_ROOT="$backbone_source_root_override"' in script
+    for step in range(2, 9, 2):
+        assert f"bash scripts/run_uploaded_act.sh vit_ours_{step}k download" in commands
+        assert f"bash scripts/run_uploaded_act.sh vit_ours_{step}k --execute" in commands
+
+
+def test_frozen_backbone_comparison_checkpoints_are_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    variants = ("ours_vit_new", "ours_rn50_new", "d4r_imagenet", "hrp_imagenet")
+    for variant in variants:
+        assert f"{variant}_2k|{variant}_4k|{variant}_6k|{variant}_8k" in script
+        assert f"bash scripts/run_uploaded_act.sh {variant}_2k download" in commands
+        for step in range(2, 9, 2):
+            assert f"bash scripts/run_uploaded_act.sh {variant}_{step}k --execute" in commands
+
+    assert "act_ours_vit_frozen_carrot_to_pot_40_color3_train40_8000steps" in script
+    assert "act_ours_rn50_frozen_carrot_to_pot_40_color3_train40_8000steps" in script
+    assert "act_d4r_imagenet_frozen_carrot_to_pot_40_color3_train40_8000steps" in script
+    assert "act_hrp_imagenet_frozen_carrot_to_pot_40_color3_train40_8000steps" in script
+
+
+def test_e2e_vit_local_checkpoints_are_selectable_without_overwriting_frozen() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "vit_e2e_2k|vit_e2e_4k|vit_e2e_6k|vit_e2e_8k" in script
+    assert "act_ours_vit_carrot_to_pot_40_color3_e2e_lr1e7_train40_8000steps" in script
+    assert "act_ours_vit_carrot_to_pot_40_color3_frozen_train40_8000steps" in script
+    for step in range(2, 9, 2):
+        assert f"bash scripts/run_uploaded_act.sh vit_e2e_{step}k download" in commands
+        assert f"bash scripts/run_uploaded_act.sh vit_e2e_{step}k --execute" in commands
+
+    assert "vit_last1_250|vit_last1_500|vit_last1_750|vit_last1_1k" in script
+    assert "last1_lr1e7_from_frozen8k_1000steps" in script
+    for step in ("250", "500", "750", "1k"):
+        assert f"bash scripts/run_uploaded_act.sh vit_last1_{step} download" in commands
+        assert f"bash scripts/run_uploaded_act.sh vit_last1_{step} --execute" in commands
+
+    assert "vit_ln_1k|vit_ln_2k|vit_ln_3k|vit_ln_4k" in script
+    assert "layernorm_only_lr1e6_train40_8000steps" in script
+    for step in range(1, 9):
+        assert f"bash scripts/run_uploaded_act.sh vit_ln_{step}k download" in commands
+        assert f"bash scripts/run_uploaded_act.sh vit_ln_{step}k --execute" in commands
+
+    assert "vit_later_1k|vit_later_2k|vit_later_3k|vit_later_4k" in script
+    assert "later1_lr1e6_train40_8000steps" in script
+    for step in range(1, 9):
+        assert f"bash scripts/run_uploaded_act.sh vit_later_{step}k download" in commands
+        assert f"bash scripts/run_uploaded_act.sh vit_later_{step}k --execute" in commands
+
+    assert "vit_compact_1k|vit_compact_3k" in script
+    assert "color3_compact_val20_4000steps" in script
+    for step in ("1k", "3k"):
+        assert f"bash scripts/run_uploaded_act.sh vit_compact_{step} download" in commands
+        assert f"bash scripts/run_uploaded_act.sh vit_compact_{step} --execute" in commands
+
+
+def test_layerwise_rn50_local_checkpoints_are_selectable_without_leaking_discovery_override() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "rn50_layerwise_2k|rn50_layerwise_4k|rn50_layerwise_6k|rn50_layerwise_8k" in script
+    assert "act_official_rn50_carrot_to_pot_40_color_layerwise_train40_8000steps" in script
+    assert "--policy.discover_packages_path" not in script
+    assert "bash scripts/run_uploaded_act.sh rn50_layerwise_8k download" in commands
+    assert "bash scripts/run_uploaded_act.sh rn50_layerwise_8k --execute" in commands
+
+
+def test_late_only_rn50_local_checkpoints_are_selectable() -> None:
+    script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    commands = (REPO_ROOT / "ACT_LITE_COMMANDS.txt").read_text()
+
+    assert "rn50_late_2k|rn50_late_4k|rn50_late_6k|rn50_late_8k" in script
+    assert "act_official_rn50_carrot_to_pot_40_color_late_train40_8000steps" in script
+    assert "bash scripts/run_uploaded_act.sh rn50_late_8k download" in commands
+    assert "bash scripts/run_uploaded_act.sh rn50_late_8k --execute" in commands
 
 
 def test_new_camera_policies_use_only_the_collected_main_view() -> None:
@@ -92,7 +239,35 @@ def test_new_camera_policies_use_only_the_collected_main_view() -> None:
     assert "fps: 20" in script
     assert "fourcc: MJPG" in script
     assert "scripts/lock_c920_focus.py" in script
+    assert 'c920_device_node="$(readlink -f "$c920_path")"' in script
+    assert 'fuser "$c920_device_node"' in script
+    assert "release_stale_c920_rollout" in script
+    assert "release_stale_act_rollouts" in script
+    assert "Disconnecting stale ACT rollout process group(s)" in script
+    assert "C920 is held by stale rollout PID(s)" in script
+    assert "C920 released; continuing with reset and reconnect." in script
+    assert "refusing to stop it automatically" in script
+    assert 'kill -KILL -- "-$holder_pgid"' in script
+    assert "hardware_reset_c920" in script
+    assert "/usr/bin/usbreset 046d:08e5" in script
+    assert "pkexec" not in script
+    assert "Resetting HD Pro Webcam C920 ... ok" in script
+    assert "C920 re-enumerated at $c920_device_node" in script
+    assert "camera_reset=usb_hardware_046d:08e5" in script
+
+    reset_rule = (REPO_ROOT / "scripts/99-c920-usbreset.rules").read_text()
+    assert 'ATTR{idVendor}=="046d"' in reset_rule
+    assert 'ATTR{idProduct}=="08e5"' in reset_rule
+    assert 'OWNER="robotarm"' in reset_rule
     assert '--robot.cameras="$robot_cameras"' in script
+
+    focus_script = (REPO_ROOT / "scripts/lock_c920_focus.py").read_text()
+    assert "reset_capture_stream" in focus_script
+    assert 're.fullmatch(r"/dev/video([0-9]+)", device_node)' in focus_script
+    assert "cv2.VideoCapture(camera_index, cv2.CAP_V4L2)" in focus_script
+    assert 'cv2.VideoWriter_fourcc(*"MJPG")' in focus_script
+    assert "C920 capture reset" in focus_script
+    assert "DEFAULT_RESET_ATTEMPTS = 3" in focus_script
     for removed_camera_setting in (
         "intelrealsense",
         "RealSense",
@@ -113,11 +288,25 @@ def test_c920_launcher_keeps_the_official_safety_cap() -> None:
     assert "arm_max_velocity" not in act_script
 
 
+def test_act_launcher_uses_official_raw_action_path() -> None:
+    act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
+    follower = (
+        REPO_ROOT
+        / "packages/lerobot_robot_trossen/src/lerobot_robot_trossen/widowxai_follower.py"
+    ).read_text()
+
+    assert "action_ema_alpha" not in act_script
+    assert "arm_action_deadband" not in act_script
+    assert "--robot.min_time_to_move_multiplier" not in act_script
+    assert "smooth_goal_positions" not in follower
+    assert "ensure_safe_goal_position" in follower
+    assert "self.driver.get_all_positions()" in follower
+
+
 def test_act_launcher_does_not_offer_legacy_policy_variants() -> None:
     act_script = (REPO_ROOT / "scripts/run_uploaded_act.sh").read_text()
 
     for legacy_variant in (
-        "ours_rn50",
         "rn50_full",
         "rn50_rms",
         "rn50_train100",

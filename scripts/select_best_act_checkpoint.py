@@ -34,8 +34,13 @@ def find_best_checkpoint(
                 continue
             report = json.loads(report_path.read_text())
             predicted = report["predicted_action_dispersion"]
+            paired_key = (
+                "paired_images"
+                if "paired_images" in predicted
+                else "all_images"
+            )
             paired_ratio = float(
-                predicted["paired_images"]["dispersion_ratio_vs_recorded"]
+                predicted[paired_key]["dispersion_ratio_vs_recorded"]
             )
             main_ratio = float(
                 predicted["main_only"]["dispersion_ratio_vs_recorded"]
@@ -79,7 +84,8 @@ def main() -> None:
     if args.image_swap_dir is not None:
         report = json.loads((args.image_swap_dir / f"{step:06d}.json").read_text())
         predicted = report["predicted_action_dispersion"]
-        result["paired_image_swap_ratio"] = predicted["paired_images"][
+        paired_key = "paired_images" if "paired_images" in predicted else "all_images"
+        result["paired_image_swap_ratio"] = predicted[paired_key][
             "dispersion_ratio_vs_recorded"
         ]
         result["main_image_swap_ratio"] = predicted["main_only"][

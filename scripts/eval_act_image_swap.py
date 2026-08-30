@@ -2,9 +2,9 @@
 """Measure whether an ACT checkpoint changes its actions when only images change.
 
 This is an offline diagnostic. It never connects to or commands a robot.
-For every validation episode, it fixes proprioception to one reference home
-state and varies the paired main/wrist first-frame images. It also varies each
-camera independently to expose which view drives the policy.
+For every selected episode, it fixes proprioception to one reference home state
+and varies first-frame images. It supports both single-camera and multi-camera
+datasets, and falls back to the training split when no validation split exists.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--dataset-root", type=Path)
     parser.add_argument(
         "--video-backend",
         choices=("torchcodec", "pyav"),
@@ -60,11 +61,13 @@ def main() -> None:
     checkpoint = args.checkpoint.resolve()
     cfg = TrainPipelineConfig.from_pretrained(checkpoint, local_files_only=True)
     cfg.policy.device = args.device
+    if args.dataset_root is not None:
+        cfg.dataset.root = args.dataset_root.resolve()
     if args.video_backend is not None:
         cfg.dataset.video_backend = args.video_backend
-    _, eval_dataset = make_train_eval_datasets(cfg)
-    if eval_dataset is None:
-        raise RuntimeError("Checkpoint training config has no validation split")
+    train_dataset, eval_dataset = make_train_eval_datasets(cfg)
+    diagnostic_dataset = eval_dataset if eval_dataset is not None else train_dataset
+    split_name = "validation" if eval_dataset is not None else "training"
 
     if isinstance(cfg.policy, ACTRN50FullConfig):
         policy_class = ACTRN50FullPolicy
@@ -83,22 +86,22 @@ def main() -> None:
         preprocessor_overrides={"device_processor": {"device": args.device}},
     )
 
-    frame_indices = eval_dataset.hf_dataset["frame_index"]
+    frame_indices = diagnostic_dataset.hf_dataset["frame_index"]
     first_rows = [index for index, frame in enumerate(frame_indices) if int(frame) == 0]
-    samples = [eval_dataset[index] for index in first_rows]
-    if len(samples) != len(eval_dataset.episodes):
+    samples = [diagnostic_dataset[index] for index in first_rows]
+    if len(samples) != len(diagnostic_dataset.episodes):
         raise RuntimeError(
-            f"Expected {len(eval_dataset.episodes)} first frames, found {len(samples)}"
+            f"Expected {len(diagnostic_dataset.episodes)} first frames, found {len(samples)}"
         )
 
-    camera_keys = list(eval_dataset.meta.camera_keys)
-    if len(camera_keys) != 2:
-        raise RuntimeError(f"Expected two cameras, found {camera_keys}")
+    camera_keys = list(diagnostic_dataset.meta.camera_keys)
+    if not camera_keys:
+        raise RuntimeError("Expected at least one camera")
     main_key = next(key for key in camera_keys if key.endswith("cam_main"))
-    wrist_key = next(key for key in camera_keys if key.endswith("cam_wrist"))
+    wrist_key = next((key for key in camera_keys if key.endswith("cam_wrist")), None)
     reference = samples[0]
 
-    def predict(sample: dict[str, object], main_image: object, wrist_image: object) -> np.ndarray:
+    def predict(sample: dict[str, object], images: dict[str, object]) -> np.ndarray:
         observation = {
             key: value
             for key, value in sample.items()
@@ -108,8 +111,7 @@ def main() -> None:
         for key, value in reference.items():
             if key.startswith("observation.") and not key.startswith("observation.images."):
                 observation[key] = value
-        observation[main_key] = main_image
-        observation[wrist_key] = wrist_image
+        observation.update(images)
         for key in camera_keys:
             image = observation[key]
             if isinstance(image, torch.Tensor) and image.dtype == torch.uint8:
@@ -121,26 +123,40 @@ def main() -> None:
         return as_tensor(predicted).squeeze(0).numpy()
 
     scenarios: dict[str, list[np.ndarray]] = {
-        "paired_images": [],
+        "all_images": [],
         "main_only": [],
-        "wrist_only": [],
     }
+    if wrist_key is not None:
+        scenarios["wrist_only"] = []
     recorded: list[np.ndarray] = []
     episodes: list[int] = []
     for sample in samples:
         episodes.append(int(sample["episode_index"]))
         recorded.append(as_tensor(sample["action"]).numpy())
-        scenarios["paired_images"].append(
-            predict(sample, sample[main_key], sample[wrist_key])
+        scenarios["all_images"].append(
+            predict(sample, {key: sample[key] for key in camera_keys})
         )
         scenarios["main_only"].append(
-            predict(sample, sample[main_key], reference[wrist_key])
+            predict(
+                sample,
+                {
+                    key: sample[key] if key == main_key else reference[key]
+                    for key in camera_keys
+                },
+            )
         )
-        scenarios["wrist_only"].append(
-            predict(sample, reference[main_key], sample[wrist_key])
-        )
+        if wrist_key is not None:
+            scenarios["wrist_only"].append(
+                predict(
+                    sample,
+                    {
+                        key: sample[key] if key == wrist_key else reference[key]
+                        for key in camera_keys
+                    },
+                )
+            )
 
-    n_steps = min(policy.config.n_action_steps, scenarios["paired_images"][0].shape[0])
+    n_steps = min(policy.config.n_action_steps, scenarios["all_images"][0].shape[0])
     recorded_array = np.stack(recorded)[:, :n_steps]
     recorded_stats = dispersion(recorded_array)
     scenario_stats: dict[str, object] = {}
@@ -156,10 +172,10 @@ def main() -> None:
         )
         scenario_stats[name] = stats
 
-    paired_ratio = scenario_stats["paired_images"]["dispersion_ratio_vs_recorded"]
-    if paired_ratio < 0.1:
+    all_images_ratio = scenario_stats["all_images"]["dispersion_ratio_vs_recorded"]
+    if all_images_ratio < 0.1:
         interpretation = "SEVERE_VISUAL_COLLAPSE"
-    elif paired_ratio < 0.3:
+    elif all_images_ratio < 0.3:
         interpretation = "WEAK_VISUAL_CONDITIONING"
     else:
         interpretation = "MEANINGFUL_VISUAL_CONDITIONING"
@@ -167,20 +183,22 @@ def main() -> None:
     report = {
         "checkpoint": str(checkpoint),
         "device": args.device,
+        "dataset_split": split_name,
         "validation_episodes": episodes,
         "reference_episode": episodes[0],
         "fixed_inputs": ["observation.state", "observation.cartesian_position"],
         "varied_inputs": {
-            "paired_images": [main_key, wrist_key],
+            "all_images": camera_keys,
             "main_only": [main_key],
-            "wrist_only": [wrist_key],
+            **({"wrist_only": [wrist_key]} if wrist_key is not None else {}),
         },
         "evaluated_action_steps": n_steps,
         "recorded_action_dispersion": recorded_stats,
         "predicted_action_dispersion": scenario_stats,
         "interpretation": interpretation,
         "notes": [
-            "Both cameras are swapped as a synchronized pair in paired_images.",
+            "All available cameras are swapped together in all_images.",
+            "Training-split fallback measures sensitivity, not held-out generalization.",
             "The ratio compares policy output diversity with recorded action diversity.",
             "Thresholds are diagnostic heuristics, not task-success guarantees.",
         ],

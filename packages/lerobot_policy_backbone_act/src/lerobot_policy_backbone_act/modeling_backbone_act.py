@@ -23,6 +23,67 @@ def _checkpoint_args(checkpoint: dict[str, Any]) -> dict[str, Any]:
     raise TypeError("Upstream backbone checkpoint args must be a mapping or namespace")
 
 
+def _configure_backbone_trainability(
+    backbone: nn.Module, config: BackboneACTConfig
+) -> None:
+    """Apply one explicit backbone trainability contract without ambiguity."""
+    for parameter in backbone.parameters():
+        parameter.requires_grad_(False)
+
+    if config.freeze_vision_backbone:
+        return
+
+    if config.vit_train_layer_norm_only:
+        layer_norm_count = 0
+        for module in backbone.modules():
+            if isinstance(module, nn.LayerNorm):
+                layer_norm_count += 1
+                for parameter in module.parameters(recurse=False):
+                    parameter.requires_grad_(True)
+        if layer_norm_count == 0:
+            raise TypeError("LayerNorm-only ViT tuning found no LayerNorm modules")
+        trainable_parameter_count = sum(
+            parameter.numel()
+            for parameter in backbone.parameters()
+            if parameter.requires_grad
+        )
+        if (
+            getattr(backbone, "output_dim", None) == 768
+            and trainable_parameter_count != 38_400
+        ):
+            raise RuntimeError(
+                "ViT-B/16 LayerNorm-only tuning must expose exactly 38,400 "
+                f"backbone parameters, got {trainable_parameter_count:,}"
+            )
+        return
+
+    trainable_last_blocks = config.vit_trainable_last_blocks
+    if trainable_last_blocks is None:
+        for parameter in backbone.parameters():
+            parameter.requires_grad_(True)
+        return
+
+    model = getattr(backbone, "model", None)
+    encoder = getattr(model, "encoder", None)
+    layers = getattr(encoder, "layers", None)
+    final_layer_norm = getattr(encoder, "ln", None)
+    if layers is None or final_layer_norm is None:
+        raise TypeError(
+            "Selective ours_vit tuning requires encoder.layers and encoder.ln"
+        )
+    layer_list = list(layers)
+    if trainable_last_blocks > len(layer_list):
+        raise ValueError(
+            f"Requested {trainable_last_blocks} trainable ViT blocks, "
+            f"but the backbone only has {len(layer_list)}"
+        )
+    for layer in layer_list[-trainable_last_blocks:]:
+        for parameter in layer.parameters():
+            parameter.requires_grad_(True)
+    for parameter in final_layer_norm.parameters():
+        parameter.requires_grad_(True)
+
+
 def _load_upstream_backbone(config: BackboneACTConfig) -> nn.Module:
     checkpoint_path = Path(
         os.environ.get("BACKBONE_CHECKPOINT", config.backbone_checkpoint)
@@ -44,6 +105,53 @@ def _load_upstream_backbone(config: BackboneACTConfig) -> nn.Module:
     models = importlib.import_module("xirl.models")
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+
+    if config.backbone_family == "pretrained_vit":
+        backbone = models.build_backbone(
+            backbone="vit_b16",
+            pretrain_path=str(checkpoint_path),
+            train_norm_affine=False,
+            train_adapters=False,
+        )
+        source_state = models._unwrap_state_dict(checkpoint)
+        if not isinstance(source_state, dict):
+            raise TypeError("Expected raw pretrained ViT weights to be a mapping")
+        target_state = backbone.model.state_dict()
+        loaded_target_keys: set[str] = set()
+        for key, value in source_state.items():
+            if not isinstance(value, torch.Tensor):
+                continue
+            candidates = (
+                key,
+                key.removeprefix("module."),
+                key.removeprefix("backbone."),
+                key.removeprefix("backbone.model."),
+            )
+            mapped_key = next(
+                (candidate for candidate in candidates if candidate in target_state),
+                None,
+            )
+            if mapped_key is None:
+                mapped_key = models._mae_to_torchvision_vit_key(key)
+            if (
+                mapped_key in target_state
+                and target_state[mapped_key].shape == value.shape
+            ):
+                loaded_target_keys.add(mapped_key)
+        missing_target_keys = sorted(set(target_state) - loaded_target_keys)
+        if missing_target_keys:
+            raise RuntimeError(
+                "Raw pretrained ViT checkpoint did not fully initialize the "
+                f"encoder; missing={missing_target_keys[:20]}"
+            )
+        if len(loaded_target_keys) != 150:
+            raise RuntimeError(
+                "ViT-B/16 raw checkpoint must initialize exactly 150 encoder "
+                f"tensors, got {len(loaded_target_keys)}"
+            )
+        _configure_backbone_trainability(backbone, config)
+        return backbone
+
     if not isinstance(checkpoint, dict) or not isinstance(
         checkpoint.get("model"), dict
     ):
@@ -91,8 +199,7 @@ def _load_upstream_backbone(config: BackboneACTConfig) -> nn.Module:
             f"backbone_act {config.backbone_family} must expose "
             f"{expected_output_dim} channels"
         )
-    for parameter in backbone.parameters():
-        parameter.requires_grad_(not config.freeze_vision_backbone)
+    _configure_backbone_trainability(backbone, config)
     return backbone
 
 
@@ -112,6 +219,12 @@ class _BackboneSpatialEncoder(nn.Module):
             else (config.backbone_image_size, config.backbone_image_size)
         )
         self.freeze_backbone = config.freeze_vision_backbone
+        self.trainable_vit_last_blocks = getattr(
+            config, "vit_trainable_last_blocks", None
+        )
+        self.train_vit_layer_norm_only = getattr(
+            config, "vit_train_layer_norm_only", False
+        )
         self.register_buffer(
             "image_mean",
             torch.tensor(config.backbone_image_mean).view(1, 3, 1, 1),
@@ -130,6 +243,22 @@ class _BackboneSpatialEncoder(nn.Module):
         if self.freeze_backbone:
             # Freeze buffers and stochastic layers as well as parameters.
             self.backbone.eval()
+        elif self.trainable_vit_last_blocks is not None:
+            # Frozen early blocks must also keep deterministic inference
+            # behavior. Only the selected final blocks enter training mode.
+            self.backbone.eval()
+            encoder = self.backbone.model.encoder
+            for layer in list(encoder.layers)[-self.trainable_vit_last_blocks :]:
+                layer.train(mode)
+            encoder.ln.train(mode)
+        elif self.train_vit_layer_norm_only:
+            # LayerNorm has no running statistics. Keep the whole ViT in eval
+            # mode so frozen dropout/stochastic layers cannot drift, then mark
+            # only LayerNorm modules with the requested public mode.
+            self.backbone.eval()
+            for module in self.backbone.modules():
+                if isinstance(module, nn.LayerNorm):
+                    module.train(mode)
         return self
 
     def preprocess(self, images: torch.Tensor) -> torch.Tensor:
@@ -222,7 +351,7 @@ class BackboneACTPolicy(ACTPolicy):
         # and a ResNet50-shaped image projection before this replacement.
         super().__init__(config, **kwargs)
         backbone = _load_upstream_backbone(config)
-        if config.backbone_family == "ours_vit":
+        if config.backbone_family in {"ours_vit", "pretrained_vit"}:
             self.model.backbone = _ViTPatchSpatialEncoder(backbone, config)
             self.model.encoder_img_feat_input_proj = nn.Conv2d(
                 768, config.dim_model, kernel_size=1

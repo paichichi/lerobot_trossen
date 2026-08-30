@@ -17,6 +17,13 @@ class BackboneACTConfig(ACTConfig):
     backbone_checkpoint: str = ""
     backbone_source_root: str = ""
     freeze_vision_backbone: bool = True
+    # None preserves the existing all-or-nothing behavior. When the backbone is
+    # trainable, a positive value restricts ViT tuning to the final N encoder
+    # blocks plus the encoder's final LayerNorm.
+    vit_trainable_last_blocks: int | None = None
+    # Train only the affine weight and bias of every ViT LayerNorm. The ACT
+    # policy remains normally trainable; every non-LN ViT parameter is frozen.
+    vit_train_layer_norm_only: bool = False
     backbone_family: str = "ours_rn50"
     backbone_image_size: int = 224
     backbone_image_mean: tuple[float, float, float] = (0.485, 0.456, 0.406)
@@ -39,9 +46,10 @@ class BackboneACTConfig(ACTConfig):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.backbone_family not in {"ours_rn50", "ours_vit"}:
+        if self.backbone_family not in {"ours_rn50", "ours_vit", "pretrained_vit"}:
             raise ValueError(
-                "backbone_family must be one of {'ours_rn50', 'ours_vit'}"
+                "backbone_family must be one of "
+                "{'ours_rn50', 'ours_vit', 'pretrained_vit'}"
             )
         if self.vision_backbone != "resnet50":
             raise ValueError(
@@ -50,10 +58,36 @@ class BackboneACTConfig(ACTConfig):
             )
         if self.backbone_image_size <= 0:
             raise ValueError("backbone_image_size must be positive")
-        if self.backbone_family == "ours_vit" and self.backbone_image_size != 224:
+        if self.backbone_family in {"ours_vit", "pretrained_vit"} and self.backbone_image_size != 224:
             raise ValueError(
-                "ours_vit is a ViT-B/16 checkpoint with a fixed 224x224 positional embedding"
+                "ViT-B/16 checkpoints require a fixed 224x224 positional embedding"
             )
+        if self.vit_trainable_last_blocks is not None:
+            if self.backbone_family not in {"ours_vit", "pretrained_vit"}:
+                raise ValueError(
+                    "vit_trainable_last_blocks is only valid for a ViT backbone"
+                )
+            if self.freeze_vision_backbone:
+                raise ValueError(
+                    "vit_trainable_last_blocks requires freeze_vision_backbone=false"
+                )
+            if not 1 <= self.vit_trainable_last_blocks <= 12:
+                raise ValueError("vit_trainable_last_blocks must be between 1 and 12")
+        if self.vit_train_layer_norm_only:
+            if self.backbone_family not in {"ours_vit", "pretrained_vit"}:
+                raise ValueError(
+                    "vit_train_layer_norm_only is only valid for a ViT backbone"
+                )
+            if self.freeze_vision_backbone:
+                raise ValueError(
+                    "vit_train_layer_norm_only requires "
+                    "freeze_vision_backbone=false"
+                )
+            if self.vit_trainable_last_blocks is not None:
+                raise ValueError(
+                    "vit_train_layer_norm_only and vit_trainable_last_blocks "
+                    "are mutually exclusive"
+                )
         if len(self.backbone_image_mean) != 3 or len(self.backbone_image_std) != 3:
             raise ValueError("Backbone image mean/std must contain three RGB values")
         if any(value <= 0 for value in self.backbone_image_std):

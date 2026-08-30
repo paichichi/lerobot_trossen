@@ -14,6 +14,7 @@ from lerobot_policy_backbone_act.configuration_native_rn50_act import (
 from lerobot_policy_backbone_act.modeling_backbone_act import (
     BackboneACTPolicy,
     _BackboneSpatialEncoder,
+    _configure_backbone_trainability,
     _load_upstream_backbone,
     _ViTPatchSpatialEncoder,
 )
@@ -51,12 +52,34 @@ class _FakeViTBackbone(nn.Module):
         self.model = _FakeViTModel()
 
 
+class _FakeSelectiveViTEncoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.layers = nn.Sequential(*(nn.Linear(2, 2) for _ in range(12)))
+        self.ln = nn.LayerNorm(2)
+
+
+class _FakeSelectiveViTModel(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv_proj = nn.Conv2d(3, 2, kernel_size=1)
+        self.encoder = _FakeSelectiveViTEncoder()
+
+
+class _FakeSelectiveViTBackbone(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = _FakeSelectiveViTModel()
+
+
 def _encoder_config(*, frozen: bool = True) -> SimpleNamespace:
     return SimpleNamespace(
         backbone_image_size=224,
         backbone_image_mean=(0.485, 0.456, 0.406),
         backbone_image_std=(0.229, 0.224, 0.225),
         freeze_vision_backbone=frozen,
+        vit_trainable_last_blocks=None,
+        vit_train_layer_norm_only=False,
     )
 
 
@@ -231,6 +254,94 @@ def test_backbone_act_accepts_fixed_resolution_ours_vit() -> None:
     assert config.backbone_image_size == 224
     with pytest.raises(ValueError, match="fixed 224x224"):
         BackboneACTConfig(backbone_family="ours_vit", backbone_image_size=384)
+    pretrained = BackboneACTConfig(backbone_family="pretrained_vit")
+    assert pretrained.backbone_image_size == 224
+    with pytest.raises(ValueError, match="fixed 224x224"):
+        BackboneACTConfig(backbone_family="pretrained_vit", backbone_image_size=384)
+
+
+def test_ours_vit_selective_tuning_rejects_ambiguous_configs() -> None:
+    with pytest.raises(ValueError, match="requires freeze_vision_backbone=false"):
+        BackboneACTConfig(
+            backbone_family="ours_vit",
+            freeze_vision_backbone=True,
+            vit_trainable_last_blocks=1,
+        )
+    with pytest.raises(ValueError, match="between 1 and 12"):
+        BackboneACTConfig(
+            backbone_family="ours_vit",
+            freeze_vision_backbone=False,
+            vit_trainable_last_blocks=0,
+        )
+    with pytest.raises(ValueError, match="only valid"):
+        BackboneACTConfig(
+            backbone_family="ours_rn50",
+            freeze_vision_backbone=False,
+            vit_trainable_last_blocks=1,
+        )
+    with pytest.raises(ValueError, match="requires freeze_vision_backbone=false"):
+        BackboneACTConfig(
+            backbone_family="ours_vit",
+            freeze_vision_backbone=True,
+            vit_train_layer_norm_only=True,
+        )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        BackboneACTConfig(
+            backbone_family="ours_vit",
+            freeze_vision_backbone=False,
+            vit_trainable_last_blocks=1,
+            vit_train_layer_norm_only=True,
+        )
+
+
+def test_ours_vit_selective_tuning_only_unfreezes_last_block_and_final_ln() -> None:
+    backbone = _FakeSelectiveViTBackbone()
+    config = BackboneACTConfig(
+        backbone_family="ours_vit",
+        freeze_vision_backbone=False,
+        vit_trainable_last_blocks=1,
+    )
+
+    _configure_backbone_trainability(backbone, config)
+
+    layers = list(backbone.model.encoder.layers)
+    assert not any(parameter.requires_grad for layer in layers[:-1] for parameter in layer.parameters())
+    assert all(parameter.requires_grad for parameter in layers[-1].parameters())
+    assert all(parameter.requires_grad for parameter in backbone.model.encoder.ln.parameters())
+    assert not any(parameter.requires_grad for parameter in backbone.model.conv_proj.parameters())
+
+
+def test_ours_vit_layer_norm_only_tuning_freezes_every_non_ln_parameter() -> None:
+    backbone = _FakeSelectiveViTBackbone()
+    config = BackboneACTConfig(
+        backbone_family="ours_vit",
+        freeze_vision_backbone=False,
+        vit_train_layer_norm_only=True,
+    )
+
+    _configure_backbone_trainability(backbone, config)
+
+    trainable_names = {
+        name for name, parameter in backbone.named_parameters() if parameter.requires_grad
+    }
+    assert trainable_names == {
+        "model.encoder.ln.weight",
+        "model.encoder.ln.bias",
+    }
+
+
+def test_ours_vit_layer_norm_only_keeps_non_ln_modules_in_eval_mode() -> None:
+    config = _encoder_config(frozen=False)
+    config.vit_train_layer_norm_only = True
+    backbone = _FakeSelectiveViTBackbone()
+    encoder = _BackboneSpatialEncoder(backbone, config)
+
+    encoder.train()
+
+    assert encoder.training
+    assert not backbone.training
+    assert backbone.model.encoder.ln.training
+    assert not backbone.model.conv_proj.training
 
 
 def test_ours_vit_exposes_spatial_patch_tokens_without_cls() -> None:
@@ -329,6 +440,35 @@ def test_best_act_checkpoint_rejects_visually_collapsed_model(tmp_path) -> None:
 
     assert step == 4000
     assert loss == pytest.approx(0.09)
+
+
+def test_best_act_checkpoint_accepts_single_camera_all_images_report(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "run"
+    image_swap_dir = output_dir / "image_swap"
+    image_swap_dir.mkdir(parents=True)
+    (output_dir / "train.log").write_text("step 1000: eval_loss=0.2000\n")
+    (output_dir / "checkpoints" / "001000" / "pretrained_model").mkdir(
+        parents=True
+    )
+    report = {
+        "predicted_action_dispersion": {
+            "all_images": {"dispersion_ratio_vs_recorded": 0.40},
+            "main_only": {"dispersion_ratio_vs_recorded": 0.40},
+        }
+    }
+    (image_swap_dir / "001000.json").write_text(json.dumps(report))
+
+    step, loss, _ = find_best_checkpoint(
+        output_dir,
+        image_swap_dir=image_swap_dir,
+        min_paired_ratio=0.30,
+        min_main_ratio=0.30,
+    )
+
+    assert step == 1000
+    assert loss == pytest.approx(0.20)
 
 
 def test_trossen_contract_uses_official_scalar_cap_and_point_one_seconds() -> None:
