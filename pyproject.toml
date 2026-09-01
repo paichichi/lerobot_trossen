@@ -1,23 +1,15 @@
 [project]
 name = "lerobot-trossen"
 version = "0.1.0"
-description = "Trossen Robotics LeRobot integration"
+description = "Frozen-ViT ACT training"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 
-dependencies = [
-  "lerobot_robot_trossen>=0.1.0",
-  "lerobot_teleoperator_trossen>=0.1.0",
-  "lerobot_policy_backbone_act>=0.1.0",
-  "lerobot_policy_v11>=0.1.0",
-  "trossen-slate>=0.0.3",
-]
+dependencies = ["lerobot_policy_backbone_act>=0.1.0"]
 
 [project.optional-dependencies]
-# Keep ACT on the exact LeRobot release recorded in uv.lock. The policy retains
-# upstream ACT; this repository owns only the trained-backbone adapter, Trossen
-# integration, and reproducible experiment entry points.
+# Keep ACT on the exact LeRobot release recorded in uv.lock.
 act = [
   "lerobot[training]==0.6.0",
   "torch==2.7.1; sys_platform == 'linux'",
@@ -31,10 +23,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-lerobot_robot_trossen = { workspace = true }
-lerobot_teleoperator_trossen = { workspace = true }
 lerobot_policy_backbone_act = { workspace = true }
-lerobot_policy_v11 = { workspace = true }
 torch = [
   { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]

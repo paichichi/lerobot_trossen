@@ -1,2 +1,0 @@
-# Allow the robotarm account to reset only the Logitech C920 USB device.
-SUBSYSTEM=="usb", ATTR{idVendor}=="046d", ATTR{idProduct}=="08e5", OWNER="robotarm", MODE="0660"
