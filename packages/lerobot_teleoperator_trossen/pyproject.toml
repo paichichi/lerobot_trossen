@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_teleoperator_trossen"
+version = "0.1.0"
+description = "Minimal WidowX AI leader for LeRobot"
+requires-python = ">=3.12,<3.13"
+dependencies = ["lerobot[core-scripts]==0.6.0", "trossen_arm==1.9.3"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["lerobot_teleoperator_trossen"]

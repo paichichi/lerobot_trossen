@@ -35,6 +35,17 @@ Train all nine policies sequentially:
 bash scripts/train_all_policies.sh
 ```
 
+## Practice
+
+Practice leader-to-follower teleoperation without recording or cameras:
+
+```bash
+bash scripts/practice.sh
+```
+
+Keep the E-stop ready. Both arms move to their staged positions when practice
+starts and move to sleep positions during normal shutdown.
+
 Each run trains for 8,000 steps and saves checkpoints at 2K, 4K, 6K, and 8K.
 Training outputs are written to `outputs/train/` and are not committed to Git.
 

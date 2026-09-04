@@ -5,7 +5,7 @@ ROOT = Path(__file__).parents[1]
 
 def test_repository_exposes_only_training_commands() -> None:
     scripts = {path.name for path in (ROOT / "scripts").iterdir() if path.is_file()}
-    assert scripts == {"train_policy.sh", "train_all_policies.sh"}
+    assert scripts == {"practice.sh", "train_policy.sh", "train_all_policies.sh"}
 
 
 def test_training_matrix_is_three_by_three() -> None:
